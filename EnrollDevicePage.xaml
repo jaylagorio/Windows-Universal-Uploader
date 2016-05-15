@@ -1,0 +1,44 @@
+﻿<ContentDialog
+    x:Class="NightscoutUploader.EnrollDevicePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:NightscoutUploader"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Enroll Device"
+    PrimaryButtonText="OK"
+    SecondaryButtonText="Cancel"
+    PrimaryButtonClick="ContentDialog_PrimaryButtonClick"
+    SecondaryButtonClick="ContentDialog_SecondaryButtonClick" Loaded="ContentDialog_Loaded">
+
+    <Grid>
+        <StackPanel Orientation="Vertical">
+            <TextBlock x:Name="lblWelcomeText" Text="To get started uploading data from your device enroll it by selecing your device below. If you haven't plugged your device in you can do so now. Click Cancel to do this step later." TextWrapping="WrapWholeWords" Grid.Column="0" Grid.Row="0" Margin="0,10,10,10" Visibility="Collapsed"/>
+            <Line Height="10px"/>
+            <StackPanel Orientation="Vertical">
+                <TextBlock Text="Device Type:"/>
+                <ListBox x:Name="lstDeviceType" SelectedIndex="0" Margin="10,0,0,0">
+                    <ListBoxItem>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                            <Image Source="ms-appx:///Assets/DexcomReceiverIcon.png"/>
+                            <TextBlock Text="Dexcom Receiver" Margin="10,07,0,0"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                </ListBox>
+            </StackPanel>
+            <Line Height="10px"/>
+            <StackPanel Orientation="Vertical" x:Name="pnlSelectDevice">
+                <TextBlock Text="Select device:"/>
+                <ListBox x:Name="lstConnectedDevices" Margin="10,0,0,0" IsEnabled="False">
+                    <ListBoxItem Content="(No new devices found)"/>
+                </ListBox>
+            </StackPanel>
+            <Line Height="10px"/>
+            <StackPanel Orientation="Vertical" x:Name="pnlSerialNumber" Visibility="Collapsed">
+                <TextBlock Text="Device Serial Number:"/>
+                <TextBox x:Name="txtSerialNumber" Margin="10,0,0,0"/>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</ContentDialog>

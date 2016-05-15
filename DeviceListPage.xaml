@@ -1,0 +1,34 @@
+﻿<ContentDialog
+    x:Class="NightscoutUploader.DeviceListPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:NightscoutUploader"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Device List"
+    PrimaryButtonText="OK"
+    PrimaryButtonClick="ContentDialog_PrimaryButtonClick" Loaded="ContentDialog_Loaded">
+
+    <Grid>
+        <ListView x:Name="lstDevices" ItemsSource="{Binding}" SelectionMode="None">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,10" VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                        <Image Margin="0,0,0,0" Source="{Binding ThumbnailAssetSource}"/>
+                        <TextBlock Margin="10,7,0,0" Text="{Binding DisplayName}"/>
+                        <TextBlock Margin="10,7,0,0" Text="{Binding InterfaceName}"/>
+                        <TextBlock Margin="10,7,0,0" Text="{Binding SerialNumber}"/>
+                        <Button Margin="10,0,0,0" Content="Remove" Click="RemoveButton_Click" Tag="{Binding SerialNumber}"/>
+                    </StackPanel>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+            <!--<ListViewHeaderItem>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Device" Margin="0,0,0,0"/>
+                    <TextBlock Text="Connected" Margin="10,0,0,0"/>
+                </StackPanel>
+            </ListViewHeaderItem>-->
+        </ListView>
+    </Grid>
+</ContentDialog>
