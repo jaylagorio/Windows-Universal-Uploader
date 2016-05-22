@@ -3,7 +3,7 @@ Imports System.Threading
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 15, 2016
+''' Date: May 22, 2016
 ''' Summary: Searches for new and unenrolled devices so the user can synchronize them with Nightscout.
 ''' </summary>
 
@@ -23,6 +23,9 @@ Public NotInheritable Class EnrollDevicePage
     Private Const ManufacturerMedtronic As String = "Medtronic"
     Private Const ModelShareReceiver As String = "Share Receiver"
     Private Const NoDevicesFoundLabel As String = "(No new devices found)"
+
+    ' Dexcom device interfaces (USB)
+    Dim DexcomUSBInterface As New USBInterface
 
     ''' <summary>
     ''' Fires when the dialog is loaded.
@@ -45,13 +48,13 @@ Public NotInheritable Class EnrollDevicePage
                     Dim DeviceAttributes() As String = CStr(lstConnectedDevices.SelectedItem.Tag).Split(":")
                     If DeviceAttributes(0) = ManufacturerDexcom Then ' Dexcom Receiver
                         Select Case DeviceAttributes(1)
-                            Case USBInterface.InterfaceName ' USB connection
+                            Case DexcomUSBInterface.InterfaceName  ' USB connection
                                 ' Check all Dexcom devices connected via USB
                                 Dim Connections As Collection(Of Dexcom.DeviceInterface.DeviceConnection) = Await (New USBInterface).GetAvailableDevices()
                                 For i = 0 To Connections.Count - 1
                                     If Connections(i).DeviceId = DeviceAttributes(2) Then
                                         ' Attempt to connect to and enroll the device
-                                        If Not Await EnrollDevice(DeviceAttributes(0), USBInterface.InterfaceName, Connections(i)) Then
+                                        If Not Await EnrollDevice(DeviceAttributes(0), DexcomUSBInterface.InterfaceName, Connections(i)) Then
                                             Await (New Windows.UI.Popups.MessageDialog("An error has occurred.")).ShowAsync
                                             args.Cancel = True
                                         End If
@@ -118,6 +121,9 @@ Public NotInheritable Class EnrollDevicePage
                         Case "USB"
                             ' Hide the serial number box, it isn't needed for USB connections to Dexcom Receivers
                             pnlSerialNumber.Visibility = Visibility.Collapsed
+                        Case "BLE"
+                            ' Show the serial number box
+                            pnlSerialNumber.Visibility = Visibility.Visible
                     End Select
                 End If
             End If
@@ -139,7 +145,7 @@ Public NotInheritable Class EnrollDevicePage
 
         If lstDeviceType.SelectedIndex = 0 Then ' Dexcom Receiver 
             ' Check for Dexcom devices on each interface type
-            Dim Interfaces() As DeviceInterface = {New USBInterface}
+            Dim Interfaces() As DeviceInterface = {New USBInterface}', New BLEInterface}
             For i = 0 To Interfaces.Length - 1
                 ' Get the number of available devices to list
                 Dim Connections As Collection(Of Dexcom.DeviceInterface.DeviceConnection) = Await Interfaces(i).GetAvailableDevices()
@@ -228,7 +234,7 @@ Public NotInheritable Class EnrollDevicePage
         If Manufacturer = ManufacturerDexcom Then
             Dim NewDevice As DexcomDevice
 
-            If DeviceInterface = USBInterface.InterfaceName Then
+            If DeviceInterface = DexcomUSBInterface.InterfaceName Then
                 ' Create the device, connect to it, and add it to Settings
                 NewDevice = New DexcomDevice(DeviceInterface, "", DeviceConnection.DeviceId)
                 If Await NewDevice.Connect() Then
