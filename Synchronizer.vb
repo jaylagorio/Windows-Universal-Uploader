@@ -1,13 +1,15 @@
 ﻿Imports Dexcom
 Imports System.Net.Http
 Imports System.Threading
+Imports Windows.Devices.Power
 Imports System.Text.UTF8Encoding
+Imports Windows.Foundation.Metadata
 Imports Windows.Networking.Connectivity
 Imports System.Runtime.Serialization.Json
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 15, 2016
+''' Date: May 22, 2016
 ''' Summary: A singleton class that syncs all connected and enrolled devices with Nightscout.
 ''' </summary>
 
@@ -53,9 +55,12 @@ Public Class Synchronizer
     ''' Creates a timer that fires at Settings.UploadInterval in minutes
     ''' </summary>
     Public Shared Sub StartTimer()
-        If pSyncTimer Is Nothing Then
-            pSyncTimer = New Timer(AddressOf Synchronize, Nothing, Settings.UploadInterval * 60 * 1000, Settings.UploadInterval * 60 * 1000)
+        If Not pSyncTimer Is Nothing Then
+            pSyncTimer.Dispose()
+            pSyncTimer = Nothing
         End If
+
+        pSyncTimer = New Timer(AddressOf Synchronize, Nothing, Settings.UploadInterval * 60 * 1000, Settings.UploadInterval * 60 * 1000)
     End Sub
 
     ''' <summary>
@@ -63,6 +68,7 @@ Public Class Synchronizer
     ''' </summary>
     Public Shared Sub StopTimer()
         If Not pSyncTimer Is Nothing Then
+            Call pSyncTimer.Dispose()
             pSyncTimer = Nothing
         End If
     End Sub
@@ -153,7 +159,7 @@ Public Class Synchronizer
         Dim LastNightscoutEntryTime As DateTime = Await GetLastNightscoutSyncTime()
 
         ' Get all records from each device one by one and aggregate them together
-        Dim NightscoutRecords As New Collection(Of NightscoutGlucoseEntry)
+        Dim NightscoutRecords As New Collection(Of NightscoutEntry)
         Dim GlucoseEntrySerializer As New DataContractJsonSerializer(GetType(NightscoutGlucoseEntry()))
         For i = 0 To Settings.EnrolledDevices.Count - 1
             ' If the device has never been sync'd go back only as far as an hour
@@ -176,13 +182,10 @@ Public Class Synchronizer
             End If
         Next
 
-        ' Attempt to upload all records to Nightscout. If successful within three tries update the last sync time setting.
-        For i = 1 To 3
-            If Await UploadRecordsToNightscout(NightscoutRecords) Then
-                Settings.LastSyncTime = DateTime.Now
-                Exit For
-            End If
-        Next
+        ' Attempt to upload all records to Nightscout. 
+        If Await UploadRecordsToNightscout(NightscoutRecords) Then
+            Settings.LastSyncTime = DateTime.Now
+        End If
 
         ' Update the UI, indicate we're no longer syncing, restart the timer event, and notify that we're not syncing anymore
         Call UpdateSyncStatus(False, "Last Sync: " & Settings.LastSyncTime)
@@ -247,7 +250,7 @@ Public Class Synchronizer
     ''' <param name="LastEntryTime">The farthest time to read behind</param>
     ''' <param name="NightscoutRecords">A Collection of NightscoutGlucoseEntry records, an empty Collection, or Nothing to serve as the start of the array of records to collect</param>
     ''' <returns>A Collection of NightscoutGlucoseEntries created from data read from the device</returns>
-    Private Shared Async Function ReadDexcomDeviceData(SyncDevice As DexcomDevice, ByVal LastEntryTime As DateTime, ByVal NightscoutRecords As Collection(Of NightscoutGlucoseEntry)) As Task(Of Collection(Of NightscoutGlucoseEntry))
+    Private Shared Async Function ReadDexcomDeviceData(SyncDevice As DexcomDevice, ByVal LastEntryTime As DateTime, ByVal NightscoutRecords As Collection(Of NightscoutEntry)) As Task(Of Collection(Of NightscoutEntry))
         Call UpdateSyncStatus("Connecting to " & SyncDevice.Manufacturer & " " & SyncDevice.Model & " (" & SyncDevice.SerialNumber & ")...")
 
         ' Attempt to connect to the device
@@ -261,33 +264,67 @@ Public Class Synchronizer
 
         ' If the Collection we were passed as a basis of results to return was Nothing, create the Collection
         If NightscoutRecords Is Nothing Then
-            NightscoutRecords = New Collection(Of NightscoutGlucoseEntry)
+            NightscoutRecords = New Collection(Of NightscoutEntry)
         End If
 
         ' Get all of the records from the last entry time, convert each record to a Nightscout record
         Call UpdateSyncStatus("Reading " & SyncDevice.Manufacturer & " " & SyncDevice.Model & " (" & SyncDevice.SerialNumber & ")...")
         Try
             Dim DeviceEGVRecords As Collection(Of DatabaseRecord) = Await SyncDevice.DexcomReceiver.GetDatabaseContents(DatabasePartitions.EGVData, LastEntryTime)
+            Dim DeviceSensorRecords As Collection(Of DatabaseRecord) = Await SyncDevice.DexcomReceiver.GetDatabaseContents(DatabasePartitions.SensorData, LastEntryTime)
+            Dim DeviceMeterRecords As Collection(Of DatabaseRecord) = Await SyncDevice.DexcomReceiver.GetDatabaseContents(DatabasePartitions.MeterData, LastEntryTime)
+            Dim DeviceInsertionRecords As Collection(Of DatabaseRecord) = Await SyncDevice.DexcomReceiver.GetDatabaseContents(DatabasePartitions.InsertionTime, LastEntryTime)
+
+            ' Look through the different record types and correlate the EGV and Sensor records based on time.
+            ' Don't include Seconds in the comparison because it seems to be off by a little for some reason.
             For i = 0 To DeviceEGVRecords.Count - 1
-                Call NightscoutRecords.Add(ConvertToNightscoutGlucoseEntry(DeviceEGVRecords(i)))
+                For j = 0 To DeviceSensorRecords.Count - 1
+                    If DeviceEGVRecords(i).SystemTime.Subtract(New TimeSpan(0, 0, DeviceEGVRecords(i).SystemTime.Second)) = DeviceSensorRecords(j).SystemTime.Subtract(New TimeSpan(0, 0, DeviceSensorRecords(j).SystemTime.Second)) Then
+                        Call NightscoutRecords.Add(ConvertToNightscoutGlucoseEntry(DeviceEGVRecords(i), DeviceSensorRecords(j)))
+                        Exit For
+                    End If
+                Next
             Next
+
+            ' Add Meter records
+            For i = 0 To DeviceMeterRecords.Count - 1
+                Call NightscoutRecords.Add(ConvertToNightscoutGlucoseEntry(DeviceMeterRecords(i)))
+            Next
+
+            ' Add sensor insertion events
+            For i = 0 To DeviceInsertionRecords.Count - 1
+                Dim TreatmentEntry As NightscoutTreatmentEntry = ConvertToNightscoutTreatmentEntry(DeviceInsertionRecords(i))
+                If Not TreatmentEntry Is Nothing Then
+                    Call NightscoutRecords.Add(TreatmentEntry)
+                End If
+            Next
+
+            ' If there is uploader device status to report create the record
+            Dim DeviceStatus As NightscoutDeviceStatusEntry = Await CreateDeviceStatusEntry()
+            If Not DeviceStatus Is Nothing Then
+                Call NightscoutRecords.Add(DeviceStatus)
+            End If
         Catch Ex As Exception
             ' Don't do anything special, continue on to disconnect and return the results thus far
         End Try
 
         ' Disconnect from the device so it can be connected to later.
-        Await SyncDevice.Disconnect()
+        Try
+            Await SyncDevice.Disconnect()
+        Catch ex As Exception
+            ' Don't do anything special, just continue through
+        End Try
 
         ' Return any results
         Return NightscoutRecords
     End Function
 
     ''' <summary>
-    ''' Converts a Dexcom EGVDatabaseRecord to a NightscoutGlucoseEntry record.
+    ''' Converts a Dexcom EGVDatabaseRecord and SensorDatabaseRecord pair to a NightscoutGlucoseEntry record.
     ''' </summary>
     ''' <param name="EGVRecord">An EGVDatabaseRecord read from a Dexcom device</param>
     ''' <returns>A NightscoutGlucoseEntry record to upload to Nightscout</returns>
-    Private Shared Function ConvertToNightscoutGlucoseEntry(ByRef EGVRecord As EGVDatabaseRecord) As NightscoutGlucoseEntry
+    Private Shared Function ConvertToNightscoutGlucoseEntry(ByRef EGVRecord As EGVDatabaseRecord, ByRef SensorRecord As SensorDatabaseRecord) As NightscoutGlucoseEntry
         Dim NightscoutEntry As New NightscoutGlucoseEntry
 
         ' Deal with dates
@@ -319,7 +356,79 @@ Public Class Synchronizer
 
         NightscoutEntry.[type] = "sgv"
         NightscoutEntry.sgv = EGVRecord.GlucoseLevel
+        NightscoutEntry.noise = EGVRecord.Noise
+        NightscoutEntry.rssi = SensorRecord.RSSI
+        NightscoutEntry.filtered = SensorRecord.Filtered
+        NightscoutEntry.unfiltered = SensorRecord.Unfiltered
         NightscoutEntry.device = "WindowsUploader-DexcomShare"
+
+        Return NightscoutEntry
+    End Function
+
+    ''' <summary>
+    ''' Converts a Dexcom MeterDatabaseRecord to a NightscoutGlucoseEntry record.
+    ''' </summary>
+    ''' <param name="MeterRecord">A MeterDatabaseRecord read from a Dexcom device</param>
+    ''' <returns>A NightscoutGlucoseEntry record to upload to Nightscout</returns>
+    Private Shared Function ConvertToNightscoutGlucoseEntry(ByRef MeterRecord As MeterDatabaseRecord) As NightscoutGlucoseEntry
+        Dim NightscoutEntry As New NightscoutGlucoseEntry
+
+        ' Deal with dates
+        Dim Offset As New DateTimeOffset(MeterRecord.DisplayTime, TimeZoneInfo.Local.GetUtcOffset(MeterRecord.DisplayTime))
+        Dim Formats() As String = MeterRecord.DisplayTime.ToUniversalTime.GetDateTimeFormats("r".ToCharArray()(0))
+        NightscoutEntry.date = Offset.ToUnixTimeMilliseconds
+        NightscoutEntry.dateString = Formats(0)
+
+        NightscoutEntry.[type] = "mbg"
+        NightscoutEntry.mbg = MeterRecord.MeterGlucose
+        NightscoutEntry.device = "WindowsUploader-DexcomShare"
+
+        Return NightscoutEntry
+    End Function
+
+    ''' <summary>
+    ''' Creates an instance of a class that represents the status of the upload device if the device is a phone.
+    ''' </summary>
+    ''' <returns>An instance of NightscoutDeviceStatusEntry that represents the status of the upload device</returns>
+    Private Shared Async Function CreateDeviceStatusEntry() As Task(Of NightscoutDeviceStatusEntry)
+        ' Get battery data but only if the device is a phone. This doesn't work for laptops for some reason.
+        If ApiInformation.IsApiContractPresent("Windows.Phone.PhoneContract", 1) Then
+            Dim NightscoutEntry As New NightscoutDeviceStatusEntry
+
+            ' Deal with dates
+            Dim Offset As New DateTimeOffset(DateTime.Now, TimeZoneInfo.Local.GetUtcOffset(DateTime.Now))
+            Dim Formats() As String = DateTime.Now.ToUniversalTime.GetDateTimeFormats("r".ToCharArray()(0))
+            NightscoutEntry.created_at = Formats(0)
+
+            ' Get the battery report
+            Dim Report As BatteryReport = (Await Battery.FromIdAsync(Windows.Devices.Power.Battery.AggregateBattery.DeviceId)).GetReport()
+            NightscoutEntry.uploaderBattery = CInt(CDbl(Report.RemainingCapacityInMilliwattHours.Value) / CDbl(Report.FullChargeCapacityInMilliwattHours.Value) * 100)
+
+            Return NightscoutEntry
+        End If
+
+        Return Nothing
+    End Function
+
+    ''' <summary>
+    ''' Converts a Dexcom InsertionDatabaseRecord to a NightscoutTreatmentEntry record.
+    ''' </summary>
+    ''' <param name="InsertionRecord">A TreatmentDatabaseRecord read from a Dexcom device</param>
+    ''' <returns>A NightscoutGlucoseEntry record to upload to Nightscout</returns>
+    Private Shared Function ConvertToNightscoutTreatmentEntry(ByRef InsertionRecord As InsertionDatabaseRecord) As NightscoutTreatmentEntry
+        Dim NightscoutEntry As New NightscoutTreatmentEntry
+
+        ' Deal with dates
+        Dim Offset As New DateTimeOffset(InsertionRecord.DisplayTime, TimeZoneInfo.Local.GetUtcOffset(InsertionRecord.DisplayTime))
+        Dim Formats() As String = InsertionRecord.DisplayTime.ToUniversalTime.GetDateTimeFormats("r".ToCharArray()(0))
+        NightscoutEntry.eventTime = Formats(0)
+        NightscoutEntry.created_at = Formats(0)
+
+        If InsertionRecord.InsertionState = InsertionDatabaseRecord.InsertionStates.Started Then
+            NightscoutEntry.eventType = "Sensor Start"
+        Else
+            NightscoutEntry = Nothing
+        End If
 
         Return NightscoutEntry
     End Function
@@ -329,12 +438,34 @@ Public Class Synchronizer
     ''' </summary>
     ''' <param name="NightscoutRecords">A Collection of NightscoutGlucoseEntry records to upload</param>
     ''' <returns>True if the upload was successful, False otherwise</returns>
-    Private Shared Async Function UploadRecordsToNightscout(ByVal NightscoutRecords As Collection(Of NightscoutGlucoseEntry)) As Task(Of Boolean)
+    Private Shared Async Function UploadRecordsToNightscout(ByVal NightscoutRecords As Collection(Of NightscoutEntry)) As Task(Of Boolean)
+        Dim Success As Boolean = False
+        Dim GlucoseEntries As New Collection(Of NightscoutGlucoseEntry)
+        Dim DeviceStatusEntries As New Collection(Of NightscoutDeviceStatusEntry)
+        Dim TreatmentEntries As New Collection(Of NightscoutTreatmentEntry)
+
+        Dim GlucoseEntrySerializer As New DataContractJsonSerializer(GetType(NightscoutGlucoseEntry()))
+        Dim DeviceStatusEntrySerializer As New DataContractJsonSerializer(GetType(NightscoutDeviceStatusEntry()))
+        Dim TreatmentEntrySerializer As New DataContractJsonSerializer(GetType(NightscoutTreatmentEntry()))
+
+        ' Divide up the records based on type so they get uploaded to the right endpoint
         If NightscoutRecords.Count > 0 Then
+            For i = 0 To NightscoutRecords.Count - 1
+                Select Case NightscoutRecords(i).EntryType
+                    Case NightscoutEntry.EntryTypes.GlucoseEntry
+                        GlucoseEntries.Add(NightscoutRecords(i))
+                    Case NightscoutEntry.EntryTypes.DeviceStatusEntry
+                        DeviceStatusEntries.Add(NightscoutRecords(i))
+                    Case NightscoutEntry.EntryTypes.TreatmentEntry
+                        TreatmentEntries.Add(NightscoutRecords(i))
+                End Select
+            Next
+        End If
+
+        If GlucoseEntries.Count > 0 Then
             ' Serialize to JSON
             Dim UploadRecordStream As New MemoryStream
-            Dim NightscoutRecordsArray() As NightscoutGlucoseEntry = NightscoutRecords.ToArray()
-            Dim GlucoseEntrySerializer As New DataContractJsonSerializer(GetType(NightscoutGlucoseEntry()))
+            Dim NightscoutRecordsArray() As NightscoutGlucoseEntry = GlucoseEntries.ToArray()
             GlucoseEntrySerializer.WriteObject(UploadRecordStream, NightscoutRecordsArray)
             Dim UploadRecordString As String = UTF8.GetString(UploadRecordStream.ToArray())
 
@@ -349,16 +480,92 @@ Public Class Synchronizer
             SyncRequest.Content = New StringContent(UploadRecordString)
             SyncRequest.Content.Headers.ContentType = New Headers.MediaTypeHeaderValue("application/json")
 
-            ' Do the upload
-            Call UpdateSyncStatus("Uploading results to Nightscout...")
-            Try
-                SyncResponse = Await HttpClient.SendAsync(SyncRequest)
-            Catch ex As Exception
-                Return False
-            End Try
+            Call UpdateSyncStatus("Uploading glucose entries to Nightscout...")
+
+            ' Do the upload, try three times
+            For i = 1 To 3
+                Try
+                    SyncResponse = Await HttpClient.SendAsync(SyncRequest)
+                    Success = True
+                    Exit For
+                Catch ex As Exception
+                    Success = False
+                End Try
+            Next
+        Else
+            Success = True
         End If
 
-        Return True
+        ' If the previous data upload was successful (or not attempted) attempt to upload device status
+        If DeviceStatusEntries.Count > 0 And Success = True Then
+            ' Serialize to JSON
+            Dim UploadRecordStream As New MemoryStream
+            Dim NightscoutRecordsArray() As NightscoutDeviceStatusEntry = DeviceStatusEntries.ToArray()
+            DeviceStatusEntrySerializer.WriteObject(UploadRecordStream, DeviceStatusEntries)
+            Dim UploadRecordString As String = UTF8.GetString(UploadRecordStream.ToArray())
+
+            ' Prepare the POST reqeuest and upload to Nightscout
+            Dim HttpClient As New HttpClient
+            Dim SyncResponse As HttpResponseMessage = Nothing
+
+            Dim SyncRequest As New HttpRequestMessage
+            Call SyncRequest.Headers.Add("API-SECRET", Settings.NightscoutAPIKey)
+            SyncRequest.RequestUri = New Uri("http://" & Settings.NightscoutURL & "/api/v1/devicestatus.json")
+            SyncRequest.Method = HttpMethod.Post
+            SyncRequest.Content = New StringContent(UploadRecordString)
+            SyncRequest.Content.Headers.ContentType = New Headers.MediaTypeHeaderValue("application/json")
+
+            Call UpdateSyncStatus("Uploading device status to Nightscout...")
+
+            ' Do the upload, try three times
+            For i = 1 To 3
+                Try
+                    SyncResponse = Await HttpClient.SendAsync(SyncRequest)
+                    Success = True
+                    Exit For
+                Catch ex As Exception
+                    Success = False
+                End Try
+            Next
+        Else
+            Success = True
+        End If
+
+        If TreatmentEntries.Count > 0 And Success = True Then
+            ' Serialize to JSON
+            Dim UploadRecordStream As New MemoryStream
+            Dim NightscoutRecordsArray() As NightscoutTreatmentEntry = TreatmentEntries.ToArray()
+            TreatmentEntrySerializer.WriteObject(UploadRecordStream, NightscoutRecordsArray)
+            Dim UploadRecordString As String = UTF8.GetString(UploadRecordStream.ToArray())
+
+            ' Prepare the POST reqeuest and upload to Nightscout
+            Dim HttpClient As New HttpClient
+            Dim SyncResponse As HttpResponseMessage = Nothing
+
+            Dim SyncRequest As New HttpRequestMessage
+            Call SyncRequest.Headers.Add("API-SECRET", Settings.NightscoutAPIKey)
+            SyncRequest.RequestUri = New Uri("http://" & Settings.NightscoutURL & "/api/v1/treatments.json")
+            SyncRequest.Method = HttpMethod.Post
+            SyncRequest.Content = New StringContent(UploadRecordString)
+            SyncRequest.Content.Headers.ContentType = New Headers.MediaTypeHeaderValue("application/json")
+
+            Call UpdateSyncStatus("Uploading treatment entries to Nightscout...")
+
+            ' Do the upload, try three times
+            For i = 1 To 3
+                Try
+                    SyncResponse = Await HttpClient.SendAsync(SyncRequest)
+                    Success = True
+                    Exit For
+                Catch ex As Exception
+                    Success = False
+                End Try
+            Next
+        Else
+            Success = True
+        End If
+
+        Return Success
     End Function
 
     ''' <summary>

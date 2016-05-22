@@ -2,7 +2,7 @@
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 15, 2016
+''' Date: May 22, 2016
 ''' Summary: Shows the user a list of currently enrolled devices and allows them to remove any that are no longer needed.
 ''' </summary>
 
@@ -33,14 +33,13 @@ Public NotInheritable Class DeviceListPage
     End Sub
 
     ''' <summary>
-    ''' 
+    ''' Removes a device from the sync process.
     ''' </summary>
-    ''' <param name="sender"></param>
-    ''' <param name="e"></param>
     Private Async Sub RemoveButton_Click(sender As Object, e As RoutedEventArgs)
         Dim ButtonPressed As Button = sender
         Dim SerialNumber As String = ButtonPressed.Tag
 
+        ' Ask the user to make sure they want to get rid of the device
         Dim ConfirmDialog As New MessageDialog("Are you sure you want to remove the device with serial number " & SerialNumber & "?", "Nightscout")
         ConfirmDialog.Commands.Add(New UICommand("No"))
         ConfirmDialog.Commands.Add(New UICommand("Yes"))
@@ -48,6 +47,7 @@ Public NotInheritable Class DeviceListPage
         ConfirmDialog.DefaultCommandIndex = 1
         Dim ConfirmDialogResult As UICommand = Await ConfirmDialog.ShowAsync()
 
+        ' Find the device in the list and remove it
         If ConfirmDialogResult.Label = "Yes" Then
             Dim DeviceList As Collection(Of Device) = Settings.EnrolledDevices
             For i = 0 To DeviceList.Count - 1
@@ -59,6 +59,7 @@ Public NotInheritable Class DeviceListPage
             Next
         End If
 
+        ' If there aren't any more devices to remove then close the dialog
         If Settings.EnrolledDevices.Count = 0 Then
             Me.Hide()
         End If
