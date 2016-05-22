@@ -38,8 +38,6 @@
 
             <TextBlock Text="Sync Interval:" Grid.Column="0" Grid.Row="3" Margin="0,10,10,0"/>
             <ComboBox x:Name="lstSyncInterval" SelectedIndex="0">
-                <ListBoxItem Content="1 minute" Tag="1"/>
-                <ListBoxItem Content="3 minute" Tag="3"/>
                 <ListBoxItem Content="5 minutes (recommended)" Tag="5"/>
                 <ListBoxItem Content="10 minutes" Tag="10"/>
                 <ListBoxItem Content="15 minutes" Tag="15"/>

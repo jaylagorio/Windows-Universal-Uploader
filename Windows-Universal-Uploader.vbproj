@@ -17,7 +17,7 @@
     <ProjectTypeGuids>{A5A43C5B-DE2A-4C0C-9213-0A381AF9435A};{F184B08F-C81C-45F6-A57F-5ABD9991F28F}</ProjectTypeGuids>
     <PackageCertificateKeyFile>Windows-Universal-Uploader_StoreKey.pfx</PackageCertificateKeyFile>
     <PackageCertificateThumbprint>A3A251164E623562FC31F54D36298A82F957B09D</PackageCertificateThumbprint>
-    <AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
+    <AppxAutoIncrementPackageRevision>True</AppxAutoIncrementPackageRevision>
     <AppxBundle>Always</AppxBundle>
     <AppxBundlePlatforms>x86|x64|arm</AppxBundlePlatforms>
   </PropertyGroup>
@@ -120,14 +120,11 @@
     <Compile Include="EnrollDevicePage.xaml.vb">
       <DependentUpon>EnrollDevicePage.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Nightscout Types\NightscoutDeviceStatusEntry.vb" />
-    <Compile Include="Nightscout Types\NightscoutEntry.vb" />
     <Compile Include="Nightscout Types\NightscoutGlucoseEntry.vb" />
     <Compile Include="MainPage.xaml.vb">
       <DependentUpon>MainPage.xaml</DependentUpon>
     </Compile>
     <Compile Include="My Project\AssemblyInfo.vb" />
-    <Compile Include="Nightscout Types\NightscoutTreatmentEntry.vb" />
     <Compile Include="Settings.vb" />
     <Compile Include="SettingsPage.xaml.vb">
       <DependentUpon>SettingsPage.xaml</DependentUpon>

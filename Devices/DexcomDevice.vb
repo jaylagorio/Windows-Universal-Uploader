@@ -3,7 +3,7 @@ Imports System.Runtime.Serialization
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 22, 2016
+''' Date: May 15, 2016
 ''' Summary: Provides communication with Dexcom monitor devices.
 ''' </summary>
 
@@ -116,54 +116,47 @@ Imports System.Runtime.Serialization
             Return True
         End If
 
-        ' Create the interface to use to connect to the device
+        ' The USB interface is the only interface currently supported.
         Dim USBInterface As New USBInterface
-        Dim ConnectionInterface As DeviceInterface = Nothing
-        If InterfaceName = USBInterface.InterfaceName Then
-            ConnectionInterface = USBInterface
-        End If
+        If Me.InterfaceName = USBInterface.InterfaceName Then
+            ' Search for all available Dexcom receivers on the USB interface.
+            Dim DevicesFound As Collection(Of DeviceInterface.DeviceConnection) = Await USBInterface.GetAvailableDevices()
 
-        If ConnectionInterface Is Nothing Then
-            Return False
-        End If
+            For i = 0 To DevicesFound.Count - 1
+                Dim NewReceiver As New Dexcom.Receiver(USBInterface)
 
-        ' Search for all available Dexcom receivers on the USB interface.
-        Dim DevicesFound As Collection(Of DeviceInterface.DeviceConnection) = Await ConnectionInterface.GetAvailableDevices()
-
-        For i = 0 To DevicesFound.Count - 1
-            Dim NewReceiver As New Dexcom.Receiver(ConnectionInterface)
-
-            ' Check the DeviceID parameter if passed.
-            If DeviceId <> "" Then
-                If DevicesFound(i).DeviceId = DeviceId Then
-                    ' Connect to the device
+                ' Check the DeviceID parameter if passed.
+                If DeviceId <> "" Then
+                    If DevicesFound(i).DeviceId = DeviceId Then
+                        ' Connect to the device
+                        If Await NewReceiver.ConnectToReceiver(DevicesFound(i)) Then
+                            pDevice = NewReceiver
+                            pDeviceId = DevicesFound(i).DeviceId
+                            SerialNumber = NewReceiver.SerialNumber
+                            pDisplayName = DevicesFound(i).DisplayName
+                            Return True
+                        Else
+                            ' Fail out if an error occurs
+                            Return False
+                        End If
+                    End If
+                ElseIf SerialNumber <> "" Then
+                    ' Connect to the receiver
                     If Await NewReceiver.ConnectToReceiver(DevicesFound(i)) Then
-                        pDevice = NewReceiver
-                        pDeviceId = DevicesFound(i).DeviceId
-                        SerialNumber = NewReceiver.SerialNumber
-                        pDisplayName = DevicesFound(i).DisplayName
-                        Return True
+                        ' Check the serial number, but don't return an error if it doesn't match
+                        If NewReceiver.SerialNumber = Me.SerialNumber Then
+                            pDevice = NewReceiver
+                            pDeviceId = DevicesFound(i).DeviceId
+                            pDisplayName = DevicesFound(i).DisplayName
+                            Return True
+                        End If
                     Else
                         ' Fail out if an error occurs
                         Return False
                     End If
                 End If
-            ElseIf SerialNumber <> "" Then
-                ' Connect to the receiver
-                If Await NewReceiver.ConnectToReceiver(DevicesFound(i)) Then
-                    ' Check the serial number, but don't return an error if it doesn't match
-                    If NewReceiver.SerialNumber = Me.SerialNumber Then
-                        pDevice = NewReceiver
-                        pDeviceId = DevicesFound(i).DeviceId
-                        pDisplayName = DevicesFound(i).DisplayName
-                        Return True
-                    End If
-                Else
-                    ' Fail out if an error occurs
-                    Return False
-                End If
-            End If
-        Next
+            Next
+        End If
 
         Return False
     End Function
@@ -189,13 +182,8 @@ Imports System.Runtime.Serialization
     ''' <returns>True if the device is disconnected, False otherwise.</returns>
     Public Overrides Async Function Disconnect() As Task(Of Boolean)
         ' Disconnect the interface and destroy the underlying object
-        Try
-            Await pDevice.Disconnect()
-            pDevice = Nothing
-        Catch ex As Exception
-            Return False
-        End Try
-
+        Await pDevice.Disconnect()
+        pDevice = Nothing
         Return True
     End Function
 End Class
