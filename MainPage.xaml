@@ -10,7 +10,7 @@
         <CommandBar>
             <CommandBar.Content>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="12,14,0,0">
-                    <ProgressRing x:Name="prgSyncing" Visibility="Collapsed"/>
+                    <ProgressRing x:Name="prgSyncing" Visibility="Collapsed" Margin="0,0,10,0"/>
                     <TextBlock x:Name="lblSyncStatus" Text="Last Sync: Never"/>
                 </StackPanel>
             </CommandBar.Content>
@@ -19,6 +19,7 @@
                 <AppBarButton x:Name="cmdDeviceList" Icon="ShowResults" Label="Device List"/>
                 <AppBarSeparator/>
                 <AppBarButton x:Name="cmdSyncNow" Icon="Sync" Label="Sync Now"/>
+                <AppBarButton x:Name="cmdCancelSync" Icon="Cancel" Label="Cancel Sync" Visibility="Collapsed"/>
                 <AppBarSeparator/>
                 <AppBarButton x:Name="cmdSettings" Icon="Setting" Label="Settings"/>
             </CommandBar.PrimaryCommands>

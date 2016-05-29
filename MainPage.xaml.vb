@@ -1,6 +1,6 @@
 ﻿''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 15, 2016
+''' Date: May 29, 2016
 ''' Summary: MainPage serves as the primary display window for the app.
 ''' </summary>
 
@@ -121,10 +121,11 @@ Public NotInheritable Class MainPage
             Await (New Windows.UI.Popups.MessageDialog("Please configure your API Secret before enrolling devices. Devices will not be able to sync with Nightscout without this setting.")).ShowAsync
         Else
             ' Show the window and if the user clicked OK set the CommandBar button state
-            Await (New EnrollDevicePage).ShowAsync()
-            Call CenterWebView.Focus(FocusState.Pointer)
-            Call Me.Focus(FocusState.Pointer)
-            Call SetDeviceButtonState()
+            If Await (New EnrollDevicePage).ShowAsync() = ContentDialogResult.None Or ContentDialogResult.Primary Or ContentDialogResult.Secondary Then
+                Call CenterWebView.Focus(FocusState.Pointer)
+                Call Me.Focus(FocusState.Pointer)
+                Call SetDeviceButtonState()
+            End If
         End If
 
         Call Synchronizer.StartTimer()
@@ -144,6 +145,17 @@ Public NotInheritable Class MainPage
     End Sub
 
     ''' <summary>
+    ''' The Stop Sync button in the CommandBar.
+    ''' </summary>
+    Private Async Sub cmdCancelSync_Click(sender As Object, e As RoutedEventArgs) Handles cmdCancelSync.Click
+        ' Only let the button be pressed once
+        cmdCancelSync.IsEnabled = False
+
+        ' Cancel the sync
+        Await Synchronizer.CancelSync()
+    End Sub
+
+    ''' <summary>
     ''' The Synchronize button in the CommandBar.
     ''' </summary>
     Private Async Sub cmdSyncNow_Click(sender As Object, e As RoutedEventArgs) Handles cmdSyncNow.Click
@@ -151,9 +163,9 @@ Public NotInheritable Class MainPage
 
         ' Kick the synchronization engine into action manually but on a different thread
         Try
-            Await Threading.Tasks.Task.Run(Sub()
-                                               Call Synchronizer.Synchronize()
-                                           End Sub)
+            Await Task.Run(Sub()
+                               Call Synchronizer.Synchronize()
+                           End Sub)
         Catch ex As Exception
             Call Synchronizer.ResetSyncStatus()
             Call SetDeviceButtonState()
@@ -194,6 +206,15 @@ Public NotInheritable Class MainPage
         cmdAddDevice.IsEnabled = Not Synchronizer.IsSynchronizing
         cmdDeviceList.IsEnabled = (Settings.EnrolledDevices.Count > 0) And (Not Synchronizer.IsSynchronizing)
         cmdSettings.IsEnabled = Not Synchronizer.IsSynchronizing
+
+        ' Alternate Sync Now/Cancel Sync button visibility
+        If Synchronizer.IsSynchronizing Then
+            cmdSyncNow.Visibility = Visibility.Collapsed
+            cmdCancelSync.Visibility = Visibility.Visible
+        Else
+            cmdSyncNow.Visibility = Visibility.Visible
+            cmdCancelSync.Visibility = Visibility.Collapsed
+        End If
 
         ' Only enable the Sync button if there are devices enrolled and we're
         ' not syncing right now

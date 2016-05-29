@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" IgnorableNamespaces="uap mp">
-  <Identity Name="12850JayLagorio.NightscoutUploader" Publisher="CN=FBEF3CAF-AA6B-4D9F-9489-07B220763A3B" Version="1.1.0.0" />
+  <Identity Name="12850JayLagorio.NightscoutUploader" Publisher="CN=FBEF3CAF-AA6B-4D9F-9489-07B220763A3B" Version="1.2.0.0" />
   <mp:PhoneIdentity PhoneProductId="7944e2e9-cb72-4ce5-8816-5b09c21d77a0" PhonePublisherId="00000000-0000-0000-0000-000000000000" />
   <Properties>
     <DisplayName>Nightscout Uploader</DisplayName>

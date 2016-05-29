@@ -3,7 +3,7 @@ Imports System.Threading
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 22, 2016
+''' Date: May 29, 2016
 ''' Summary: Searches for new and unenrolled devices so the user can synchronize them with Nightscout.
 ''' </summary>
 
@@ -11,7 +11,8 @@ Public NotInheritable Class EnrollDevicePage
     Inherits ContentDialog
 
     ' The timer that looks for devices while the window is visible
-    Private pTimer As Timer
+    'Private pTimer As Timer
+    Private pStopHardwareSearch As Boolean
 
     ' A list of devices that are already in the display to prevent duplicates
     ' and to keep from having to clear/repopulate the list while the user looks
@@ -22,10 +23,11 @@ Public NotInheritable Class EnrollDevicePage
     Private Const ManufacturerDexcom As String = "Dexcom"
     Private Const ManufacturerMedtronic As String = "Medtronic"
     Private Const ModelShareReceiver As String = "Share Receiver"
-    Private Const NoDevicesFoundLabel As String = "(No new devices found)"
+    Private Const LookingForNewDevicesLabel As String = "Looking for new devices..."
 
     ' Dexcom device interfaces (USB)
-    Dim DexcomUSBInterface As New USBInterface
+    Private pDexcomUSBInterface As New USBInterface
+    Private pDexcomBLEInterface As New BLEInterface
 
     ''' <summary>
     ''' Fires when the dialog is loaded.
@@ -43,26 +45,58 @@ Public NotInheritable Class EnrollDevicePage
             ' Check to see that a device is selected
             If lstConnectedDevices.SelectedIndex >= 0 Then
                 ' Check to make sure the selected device isn't the No Devices Found label
-                If lstConnectedDevices.Items(0).Content <> NoDevicesFoundLabel Then
+                If lstConnectedDevices.Items(0).Content <> LookingForNewDevicesLabel Then
+
+                    ' Disable controls while attempting to enroll and initially connect to the new device
+                    args.Cancel = True
+                    Me.PrimaryButtonText = "Enrolling device..."
+                    Me.lstDeviceType.IsEnabled = False
+                    Me.lstConnectedDevices.IsEnabled = False
+                    Me.txtSerialNumber.IsEnabled = False
+                    Me.IsPrimaryButtonEnabled = False
+                    Me.IsSecondaryButtonEnabled = False
+
                     ' Split by manufacturer, interface, possibly DeviceId
                     Dim DeviceAttributes() As String = CStr(lstConnectedDevices.SelectedItem.Tag).Split(":")
                     If DeviceAttributes(0) = ManufacturerDexcom Then ' Dexcom Receiver
                         Select Case DeviceAttributes(1)
-                            Case DexcomUSBInterface.InterfaceName  ' USB connection
+                            Case pDexcomUSBInterface.InterfaceName  ' USB connection
                                 ' Check all Dexcom devices connected via USB
-                                Dim Connections As Collection(Of Dexcom.DeviceInterface.DeviceConnection) = Await (New USBInterface).GetAvailableDevices()
+                                Dim Connections As Collection(Of Dexcom.DeviceInterface.DeviceConnection) = Await pDexcomUSBInterface.GetAvailableDevices()
                                 For i = 0 To Connections.Count - 1
                                     If Connections(i).DeviceId = DeviceAttributes(2) Then
                                         ' Attempt to connect to and enroll the device
-                                        If Not Await EnrollDevice(DeviceAttributes(0), DexcomUSBInterface.InterfaceName, Connections(i)) Then
+                                        If Not Await EnrollDevice(DeviceAttributes(0), pDexcomUSBInterface.InterfaceName, Connections(i)) Then
                                             Await (New Windows.UI.Popups.MessageDialog("An error has occurred.")).ShowAsync
-                                            args.Cancel = True
+                                        Else
+                                            Call Me.Hide()
                                         End If
-
+                                    End If
+                                Next
+                            Case pDexcomBLEInterface.InterfaceName ' BLE connection
+                                ' Check all Dexcom devices connected via BLE
+                                Dim Connections As Collection(Of Dexcom.DeviceInterface.DeviceConnection) = Await pDexcomBLEInterface.GetAvailableDevices()
+                                For i = 0 To Connections.Count - 1
+                                    If Connections(i).DeviceId = DeviceAttributes(2) Then
+                                        ' Attempt to connect to and enroll the device
+                                        If Not Await EnrollDevice(DeviceAttributes(0), pDexcomBLEInterface.InterfaceName, Connections(i)) Then
+                                            Await (New Windows.UI.Popups.MessageDialog("An error has occurred.")).ShowAsync
+                                        Else
+                                            Call Me.Hide()
+                                        End If
                                     End If
                                 Next
                         End Select
                     End If
+
+                    ' Reenable controls after attempting to connect to the new device. If that was
+                    ' successful this doesn't matter but if not the user can try again.
+                    Me.lstDeviceType.IsEnabled = True
+                    Me.lstConnectedDevices.IsEnabled = True
+                    Me.txtSerialNumber.IsEnabled = True
+                    Me.IsPrimaryButtonEnabled = True
+                    Me.IsSecondaryButtonEnabled = True
+                    Me.PrimaryButtonText = "OK"
                 End If
             End If
         End If
@@ -71,22 +105,25 @@ Public NotInheritable Class EnrollDevicePage
     ''' <summary>
     ''' Start the timer that scans for new hardware attached to the system
     ''' </summary>
-    Private Sub StartTimer()
+    Private Async Sub StartTimer()
         ' Starts a timer with an immediate run and a repeat every one second
-        pTimer = New Timer(AddressOf TimerProc, Nothing, 0, 1000)
+        'pTimer = New Timer(AddressOf TimerProc, Nothing, 0, 1000)
+        Await Task.Run(AddressOf TimerProc)
     End Sub
 
     ''' <summary>
     ''' Stops the hardware scanning timer
     ''' </summary>
     Private Sub StopTimer()
-        pTimer = Nothing
+        'Call pTimer.Dispose()
+        'pTimer = Nothing
     End Sub
 
     ''' <summary>
     ''' Fires when the user clicks the Cancel button.
     ''' </summary>
     Private Sub ContentDialog_SecondaryButtonClick(sender As ContentDialog, args As ContentDialogButtonClickEventArgs)
+        pStopHardwareSearch = True
         Me.Hide()
     End Sub
 
@@ -112,7 +149,7 @@ Public NotInheritable Class EnrollDevicePage
         ' Check to see if a device is selected
         If lstConnectedDevices.SelectedIndex >= 0 Then
             ' Make sure anything selected isn't the No Devices Found message
-            If lstConnectedDevices.SelectedValue.Content <> NoDevicesFoundLabel Then
+            If lstConnectedDevices.SelectedValue.Content <> LookingForNewDevicesLabel Then
 
                 ' Check the selected device for manufacturer and interface
                 Dim DeviceAttributes() As String = CStr(lstConnectedDevices.SelectedItem.Tag).Split(":")
@@ -124,6 +161,7 @@ Public NotInheritable Class EnrollDevicePage
                         Case "BLE"
                             ' Show the serial number box
                             pnlSerialNumber.Visibility = Visibility.Visible
+                            Call txtSerialNumber.Focus(FocusState.Programmatic)
                     End Select
                 End If
             End If
@@ -143,84 +181,90 @@ Public NotInheritable Class EnrollDevicePage
     Private Async Sub TimerProcUIThread()
         Dim DevicesFound As Integer = 0
 
-        If lstDeviceType.SelectedIndex = 0 Then ' Dexcom Receiver 
-            ' Check for Dexcom devices on each interface type
-            Dim Interfaces() As DeviceInterface = {New USBInterface}', New BLEInterface}
-            For i = 0 To Interfaces.Length - 1
-                ' Get the number of available devices to list
-                Dim Connections As Collection(Of Dexcom.DeviceInterface.DeviceConnection) = Await Interfaces(i).GetAvailableDevices()
-                For j = 0 To Connections.Count - 1
+        ' Do all of the following once per second until pStopHardwareSearch is True
+        While Not pStopHardwareSearch
+            If lstDeviceType.SelectedIndex = 0 Then ' Dexcom Receiver 
+                ' Check for Dexcom devices on each interface type
+                Dim Interfaces() As DeviceInterface = {New USBInterface, New BLEInterface}
+                For i = 0 To Interfaces.Length - 1
+                    ' Get the number of available devices to list
+                    Dim Connections As Collection(Of Dexcom.DeviceInterface.DeviceConnection) = Await Interfaces(i).GetAvailableDevices()
+                    For j = 0 To Connections.Count - 1
 
-                    ' Check to make sure the device isn't already enrolled by comparing the DeviceId or Serial Number
-                    Dim DeviceEnrolled As Boolean = False
-                    If Settings.EnrolledDevices.Count > 0 Then
-                        For k = 0 To Settings.EnrolledDevices.Count - 1
-                            Try
-                                ' Compare the DeviceId
-                                If Connections(j).DeviceId <> "" And Settings.EnrolledDevices(k).DeviceId <> "" Then
-                                    If Connections(j).DeviceId = Settings.EnrolledDevices(k).DeviceId Then
-                                        DeviceEnrolled = True
-                                        Exit For
-                                    End If
-                                ElseIf Settings.EnrolledDevices(k).SerialNumber <> "" Then
-                                    ' Compare the Serial Numbers by first connecting to the potentially new receiver and the existing receivers
-                                    Dim PotentialReceiver As New DexcomDevice(Connections(j).InterfaceName, "", Connections(j).DeviceId)
-                                    If Await PotentialReceiver.Connect() Then
-                                        If Await Settings.EnrolledDevices(k).Connect() Then
-                                            If PotentialReceiver.SerialNumber = Settings.EnrolledDevices(k).SerialNumber Then
-                                                DeviceEnrolled = True
-                                            End If
-
-                                            ' Disconnect after comparisons
-                                            Await Settings.EnrolledDevices(k).Disconnect
-                                        End If
-
-                                        ' Disconnect the potentially new device
-                                        Await PotentialReceiver.Disconnect
-                                        If DeviceEnrolled Then
+                        ' Check to make sure the device isn't already enrolled by comparing the DeviceId or Serial Number
+                        Dim DeviceEnrolled As Boolean = False
+                        If Settings.EnrolledDevices.Count > 0 Then
+                            For k = 0 To Settings.EnrolledDevices.Count - 1
+                                Try
+                                    ' Compare the DeviceId
+                                    If Connections(j).DeviceId <> "" And Settings.EnrolledDevices(k).DeviceId <> "" Then
+                                        If Connections(j).DeviceId = Settings.EnrolledDevices(k).DeviceId Then
+                                            DeviceEnrolled = True
                                             Exit For
                                         End If
-                                    End If
-                                End If
-                            Catch Ex As Exception
-                                Continue For
-                            End Try
-                        Next
-                    End If
+                                    ElseIf Settings.EnrolledDevices(k).SerialNumber <> "" Then
+                                        ' Compare the Serial Numbers by first connecting to the potentially new receiver and the existing receivers
+                                        Dim PotentialReceiver As New DexcomDevice(Connections(j).InterfaceName, "", Connections(j).DeviceId)
+                                        If Await PotentialReceiver.Connect() Then
+                                            If Await Settings.EnrolledDevices(k).Connect() Then
+                                                If PotentialReceiver.SerialNumber = Settings.EnrolledDevices(k).SerialNumber Then
+                                                    DeviceEnrolled = True
+                                                End If
 
-                    ' If the device isn't already enrolled check to make sure it isn't already displayed
-                    If Not DeviceEnrolled Then
-                        ' Check to see whether the device is already in the list of connections already displayed
-                        If Not pDisplayedConnections.Contains(Connections(j).DeviceId) Then
-                            ' Add the item to the list of displayed connections and add it to the ListBox for the user to select
-                            Call pDisplayedConnections.Add(Connections(j).DeviceId)
-                            Dim NewItem As New ListBoxItem()
-                            NewItem.Content = Connections(j).DisplayName
-                            NewItem.Tag = ManufacturerDexcom & ":" & Connections(j).InterfaceName & ":" & Connections(j).DeviceId
-                            Call lstConnectedDevices.Items.Add(NewItem)
+                                                ' Disconnect after comparisons
+                                                Await Settings.EnrolledDevices(k).Disconnect
+                                            End If
+
+                                            ' Disconnect the potentially new device
+                                            Await PotentialReceiver.Disconnect
+                                            If DeviceEnrolled Then
+                                                Exit For
+                                            End If
+                                        End If
+                                    End If
+                                Catch Ex As Exception
+                                    Continue For
+                                End Try
+                            Next
                         End If
 
-                        DevicesFound += 1
-                    End If
-                Next
-            Next
-        End If
+                        ' If the device isn't already enrolled check to make sure it isn't already displayed
+                        If Not DeviceEnrolled Then
+                            ' Check to see whether the device is already in the list of connections already displayed
+                            If Not pDisplayedConnections.Contains(Connections(j).DeviceId) Then
+                                ' Add the item to the list of displayed connections and add it to the ListBox for the user to select
+                                Call pDisplayedConnections.Add(Connections(j).DeviceId)
+                                Dim NewItem As New ListBoxItem()
+                                NewItem.Content = Connections(j).DisplayName
+                                NewItem.Tag = ManufacturerDexcom & ":" & Connections(j).InterfaceName & ":" & Connections(j).DeviceId
+                                Call lstConnectedDevices.Items.Add(NewItem)
+                            End If
 
-        ' If there aren't any new devices found show the NoDevicesFound label
-        If DevicesFound = 0 Then
-            If lstConnectedDevices.Items(0).Content <> NoDevicesFoundLabel Then
-                lstConnectedDevices.IsEnabled = False
-                pnlSerialNumber.Visibility = Visibility.Collapsed
-                Call lstConnectedDevices.Items.Clear()
-                Call pDisplayedConnections.Clear()
-                Dim NewItem As New ListBoxItem()
-                NewItem.Content = NoDevicesFoundLabel
-                Call lstConnectedDevices.Items.Add(NewItem)
+                            DevicesFound += 1
+                        End If
+                    Next
+                Next
             End If
-        ElseIf DevicesFound > 0 And lstConnectedDevices.Items(0).Content = NoDevicesFoundLabel Then
-            lstConnectedDevices.IsEnabled = True
-            Call lstConnectedDevices.Items.RemoveAt(0)
-        End If
+
+            ' If there aren't any new devices found show the NoDevicesFound label
+            If DevicesFound = 0 Then
+                If lstConnectedDevices.Items(0).Content <> LookingForNewDevicesLabel Then
+                    lstConnectedDevices.IsEnabled = False
+                    pnlSerialNumber.Visibility = Visibility.Collapsed
+                    Call lstConnectedDevices.Items.Clear()
+                    Call pDisplayedConnections.Clear()
+                    Dim NewItem As New ListBoxItem()
+                    NewItem.Content = LookingForNewDevicesLabel
+                    Call lstConnectedDevices.Items.Add(NewItem)
+                End If
+            ElseIf DevicesFound > 0 And lstConnectedDevices.Items(0).Content = LookingForNewDevicesLabel Then
+                lstConnectedDevices.IsEnabled = True
+                Call lstConnectedDevices.Items.RemoveAt(0)
+            End If
+
+            ' Wait one second until running the loop again
+            Await Task.Delay(1000)
+        End While
     End Sub
 
     ''' <summary>
@@ -234,9 +278,18 @@ Public NotInheritable Class EnrollDevicePage
         If Manufacturer = ManufacturerDexcom Then
             Dim NewDevice As DexcomDevice
 
-            If DeviceInterface = DexcomUSBInterface.InterfaceName Then
+            If DeviceInterface = pDexcomUSBInterface.InterfaceName Then
                 ' Create the device, connect to it, and add it to Settings
                 NewDevice = New DexcomDevice(DeviceInterface, "", DeviceConnection.DeviceId)
+                If Await NewDevice.Connect() Then
+                    Call Settings.AddEnrolledDevice(NewDevice)
+                    Await NewDevice.Disconnect()
+                    Return True
+                End If
+            ElseIf DeviceInterface = pDexcomBLEInterface.InterfaceName Then
+                ' Create the device, connect to it, and add it to Settings
+                NewDevice = New DexcomDevice(DeviceInterface, txtSerialNumber.Text, DeviceConnection.DeviceId)
+                NewDevice.SerialNumber = txtSerialNumber.Text
                 If Await NewDevice.Connect() Then
                     Call Settings.AddEnrolledDevice(NewDevice)
                     Await NewDevice.Disconnect()

@@ -3,7 +3,7 @@ Imports System.Runtime.Serialization
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 22, 2016
+''' Date: May 29, 2016
 ''' Summary: Provides communication with Dexcom monitor devices.
 ''' </summary>
 
@@ -24,6 +24,7 @@ Imports System.Runtime.Serialization
     Sub New(ByVal InterfaceName As String, ByVal SerialNumber As String, ByVal DeviceId As String)
         MyBase.New(InterfaceName, SerialNumber, DeviceId)
         pDisplayName = "Dexcom Receiver"
+        Me.SerialNumber = SerialNumber
     End Sub
 
     ''' <summary>
@@ -111,23 +112,37 @@ Imports System.Runtime.Serialization
     ''' </summary>
     ''' <returns>True if the device is successfully connected, False otherwise</returns>
     Public Overrides Async Function Connect() As Task(Of Boolean)
-        ' If the device is already connected don't look for it again.
-        If Await IsConnected() Then
-            Return True
+        ' Check to see if pDevice is already something and if so try to revive
+        ' the connection by calling Connect() so that uses the existing interface data
+        If Not pDevice Is Nothing Then
+            ' If the device is already connected don't look for it again.
+            If Await IsConnected() Then
+                Return True
+            End If
+
+            ' Try to reestablish any previously existing connection
+            If Await pDevice.Connect() Then
+                Return True
+            End If
         End If
 
-        ' Create the interface to use to connect to the device
+        ' Create a new interface to use to connect to the device
         Dim USBInterface As New USBInterface
+        Dim BLEInterface As New BLEInterface
         Dim ConnectionInterface As DeviceInterface = Nothing
         If InterfaceName = USBInterface.InterfaceName Then
             ConnectionInterface = USBInterface
+        ElseIf InterfaceName = BLEInterface.InterfaceName Then
+            BLEInterface.SerialNumber = Me.SerialNumber
+            ConnectionInterface = BLEInterface
         End If
 
+        ' If an interface wasn't settled then fail out
         If ConnectionInterface Is Nothing Then
             Return False
         End If
 
-        ' Search for all available Dexcom receivers on the USB interface.
+        ' Search for all available Dexcom receivers on the selected interface.
         Dim DevicesFound As Collection(Of DeviceInterface.DeviceConnection) = Await ConnectionInterface.GetAvailableDevices()
 
         For i = 0 To DevicesFound.Count - 1
@@ -137,7 +152,7 @@ Imports System.Runtime.Serialization
             If DeviceId <> "" Then
                 If DevicesFound(i).DeviceId = DeviceId Then
                     ' Connect to the device
-                    If Await NewReceiver.ConnectToReceiver(DevicesFound(i)) Then
+                    If Await NewReceiver.Connect(DevicesFound(i)) Then
                         pDevice = NewReceiver
                         pDeviceId = DevicesFound(i).DeviceId
                         SerialNumber = NewReceiver.SerialNumber
@@ -150,7 +165,7 @@ Imports System.Runtime.Serialization
                 End If
             ElseIf SerialNumber <> "" Then
                 ' Connect to the receiver
-                If Await NewReceiver.ConnectToReceiver(DevicesFound(i)) Then
+                If Await NewReceiver.Connect(DevicesFound(i)) Then
                     ' Check the serial number, but don't return an error if it doesn't match
                     If NewReceiver.SerialNumber = Me.SerialNumber Then
                         pDevice = NewReceiver
@@ -191,7 +206,6 @@ Imports System.Runtime.Serialization
         ' Disconnect the interface and destroy the underlying object
         Try
             Await pDevice.Disconnect()
-            pDevice = Nothing
         Catch ex As Exception
             Return False
         End Try

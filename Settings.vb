@@ -7,7 +7,7 @@ Imports Windows.Security.Cryptography.Core
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 15, 2016
+''' Date: May 29, 2016
 ''' Summary: Exposes a quick and easy way to save and retrieve settings. Data is saved as Roaming Settings, allowing the 
 ''' user to move from system to system while being able to sync devices that have been enrolled on any other system.
 ''' </summary>
@@ -244,12 +244,21 @@ Public Class Settings
             ' Load and deserialize the stream and pull the first Device object off
             Dim DeviceJsonStream As New MemoryStream(UTF8.GetBytes(DeviceJson))
             Dim DeviceSerializer As New DataContractJsonSerializer(GetType(Generic))
-            Dim CurrentDevice As Device = DeviceSerializer.ReadObject(DeviceJsonStream)
+            Dim CurrentDevice As Device = Nothing
+
+            ' Read the first object in the stream
+            Try
+                CurrentDevice = DeviceSerializer.ReadObject(DeviceJsonStream)
+            Catch ex As Exception
+                CurrentDevice = Nothing
+            End Try
 
             Do
-                ' Check the manufacturer and create the specifc device (DexcomDevice, etc) from the Device
-                If CurrentDevice.Manufacturer = "Dexcom" Then
-                    Call pDevices.Add(New DexcomDevice(CurrentDevice))
+                If Not CurrentDevice Is Nothing Then
+                    ' Check the manufacturer and create the specifc device (DexcomDevice, etc) from the Device
+                    If CurrentDevice.Manufacturer = "Dexcom" Then
+                        Call pDevices.Add(New DexcomDevice(CurrentDevice))
+                    End If
                 End If
 
                 ' Try to pull another object off the stream and exit the loop if there isn't one

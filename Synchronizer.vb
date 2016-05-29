@@ -9,7 +9,7 @@ Imports System.Runtime.Serialization.Json
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 22, 2016
+''' Date: May 29, 2016
 ''' Summary: A singleton class that syncs all connected and enrolled devices with Nightscout.
 ''' </summary>
 
@@ -28,6 +28,12 @@ Public Class Synchronizer
 
     ' Indicates whether the synchronization process is running or not.
     Private Shared pSyncRunning As Boolean = False
+
+    ' Allows another thread to cancel the sync operation in 
+    ' an Awaitable fashion
+    Private Const CancelDelayMilliseconds As Integer = 100
+    Private Shared pCancelSync As Boolean = False       ' Cancellation has been requested
+    Private Shared pSyncCancelled As Boolean = False    ' The request has been fulfilled
 
     ' Events indicating that synchronization has started or stopped.
     Public Shared Event SynchronizationStarted()
@@ -56,7 +62,7 @@ Public Class Synchronizer
     ''' </summary>
     Public Shared Sub StartTimer()
         If Not pSyncTimer Is Nothing Then
-            pSyncTimer.Dispose()
+            Call pSyncTimer.Dispose()
             pSyncTimer = Nothing
         End If
 
@@ -71,6 +77,44 @@ Public Class Synchronizer
             Call pSyncTimer.Dispose()
             pSyncTimer = Nothing
         End If
+    End Sub
+
+    ''' <summary>
+    ''' Cancels the synchronization process.
+    ''' </summary>
+    ''' <returns>True when the synchronization process has been successfully stopped, False otherwise</returns>
+    Public Shared Async Function CancelSync() As Task(Of Boolean)
+        ' Indicate that a cancellation has been requested
+        Call Volatile.Write(pCancelSync, True)
+
+        Call UpdateSyncStatus("Cancelling Synchronization...")
+
+        ' Wait to see whether the cancellation has succeeded
+        While Not Volatile.Read(pSyncCancelled)
+            Await Task.Yield()
+            Await Task.Delay(CancelDelayMilliseconds)
+        End While
+
+        ' Reset all of the synchronization and cancellation state variables
+        Call Volatile.Write(pSyncRunning, False)
+        Call Volatile.Write(pSyncCancelled, False)
+        Call Volatile.Write(pCancelSync, False)
+        Return True
+    End Function
+
+    ''' <summary>
+    ''' Returns whether a cancellation has been requested.
+    ''' </summary>
+    ''' <returns>True if a cancellation has been requested, False otherwise</returns>
+    Private Shared Function IsSyncCancelled() As Boolean
+        Return Volatile.Read(pCancelSync)
+    End Function
+
+    ''' <summary>
+    ''' Indicates that cancelling the sync process has completed.
+    ''' </summary>
+    Private Shared Sub ConfirmSyncCancelled()
+        Call Volatile.Write(pSyncCancelled, True)
     End Sub
 
     ''' <summary>
@@ -113,6 +157,7 @@ Public Class Synchronizer
                                                                 Else
                                                                     pProgressRing.Visibility = Visibility.Collapsed
                                                                 End If
+                                                                pProgressRing.IsActive = SyncInProgress
                                                                 pStatusTextBlock.Text = StatusMessage
                                                             End If
                                                         End Sub)
@@ -174,17 +219,30 @@ Public Class Synchronizer
 
             ' Read each device's records
             Call UpdateSyncStatus("Synchronizing " & Settings.EnrolledDevices(i).Manufacturer & " " & Settings.EnrolledDevices(i).Model & " (" & Settings.EnrolledDevices(i).SerialNumber & ")...")
+            Dim DeviceDownloadStartTime As DateTime = DateTime.Now
             If Settings.EnrolledDevices(i).GetType Is GetType(DexcomDevice) Then
                 NightscoutRecords = Await ReadDexcomDeviceData(Settings.EnrolledDevices(i), Settings.EnrolledDevices(i).LastSyncTime, NightscoutRecords)
-
-                ' Update the device's last sync time
-                Call Settings.SetEnrolledDeviceLastSyncTime(Settings.EnrolledDevices(i), DateTime.Now)
             End If
+
+            ' If a sync in progress was cancelled don't move onto the next device
+            ' and don't set this device's last sync time
+            If IsSyncCancelled() Then
+                Exit For
+            End If
+
+            ' Update the device's last sync time
+            Call Settings.SetEnrolledDeviceLastSyncTime(Settings.EnrolledDevices(i), DeviceDownloadStartTime)
         Next
 
-        ' Attempt to upload all records to Nightscout. 
-        If Await UploadRecordsToNightscout(NightscoutRecords) Then
-            Settings.LastSyncTime = DateTime.Now
+        ' Check to see if the sync was cancelled
+        If Not IsSyncCancelled() Then
+            ' Attempt to upload all records to Nightscout. 
+            If Await UploadRecordsToNightscout(NightscoutRecords) Then
+                Settings.LastSyncTime = DateTime.Now
+            End If
+        Else
+            ' Indicate the cancellation was successful.
+            Call ConfirmSyncCancelled()
         End If
 
         ' Update the UI, indicate we're no longer syncing, restart the timer event, and notify that we're not syncing anymore
@@ -195,7 +253,6 @@ Public Class Synchronizer
 
         Return
     End Sub
-
 
     ''' <summary>
     ''' Connects to the Nightscout server and attempts to get the most recent entry, then gets the time that entry was uploaded
@@ -267,23 +324,65 @@ Public Class Synchronizer
             NightscoutRecords = New Collection(Of NightscoutEntry)
         End If
 
+        ' Check to see if the sync was cancelled.
+        If IsSyncCancelled() Then
+            Await SyncDevice.Disconnect()
+            Return NightscoutRecords
+        End If
+
         ' Get all of the records from the last entry time, convert each record to a Nightscout record
-        Call UpdateSyncStatus("Reading " & SyncDevice.Manufacturer & " " & SyncDevice.Model & " (" & SyncDevice.SerialNumber & ")...")
         Try
+            Call UpdateSyncStatus("Reading " & SyncDevice.Manufacturer & " " & SyncDevice.Model & " Sensor Data...")
             Dim DeviceEGVRecords As Collection(Of DatabaseRecord) = Await SyncDevice.DexcomReceiver.GetDatabaseContents(DatabasePartitions.EGVData, LastEntryTime)
+
+            ' Check to see if the sync was cancelled.
+            If IsSyncCancelled() Then
+                Await SyncDevice.Disconnect()
+                Return NightscoutRecords
+            End If
+
             Dim DeviceSensorRecords As Collection(Of DatabaseRecord) = Await SyncDevice.DexcomReceiver.GetDatabaseContents(DatabasePartitions.SensorData, LastEntryTime)
+
+            ' Check to see if the sync was cancelled.
+            If IsSyncCancelled() Then
+                Await SyncDevice.Disconnect()
+                Return NightscoutRecords
+            End If
+
+            Call UpdateSyncStatus("Reading " & SyncDevice.Manufacturer & " " & SyncDevice.Model & " Meter Data...")
             Dim DeviceMeterRecords As Collection(Of DatabaseRecord) = Await SyncDevice.DexcomReceiver.GetDatabaseContents(DatabasePartitions.MeterData, LastEntryTime)
+
+            ' Check to see if the sync was cancelled.
+            If IsSyncCancelled() Then
+                Await SyncDevice.Disconnect()
+                Return NightscoutRecords
+            End If
+
+            Call UpdateSyncStatus("Reading " & SyncDevice.Manufacturer & " " & SyncDevice.Model & " Insertion Data...")
             Dim DeviceInsertionRecords As Collection(Of DatabaseRecord) = Await SyncDevice.DexcomReceiver.GetDatabaseContents(DatabasePartitions.InsertionTime, LastEntryTime)
 
+            ' Check to see if the sync was cancelled.
+            If IsSyncCancelled() Then
+                Await SyncDevice.Disconnect()
+                Return NightscoutRecords
+            End If
+
             ' Look through the different record types and correlate the EGV and Sensor records based on time.
-            ' Don't include Seconds in the comparison because it seems to be off by a little for some reason.
+            ' Match based on whether the EGV record and Sensor records are within 10 seconds of each other.
             For i = 0 To DeviceEGVRecords.Count - 1
+                Dim MatchFound As Boolean = False
                 For j = 0 To DeviceSensorRecords.Count - 1
-                    If DeviceEGVRecords(i).SystemTime.Subtract(New TimeSpan(0, 0, DeviceEGVRecords(i).SystemTime.Second)) = DeviceSensorRecords(j).SystemTime.Subtract(New TimeSpan(0, 0, DeviceSensorRecords(j).SystemTime.Second)) Then
+                    If (DeviceEGVRecords(i).SystemTime - DeviceSensorRecords(j).SystemTime).Duration() <= New TimeSpan(0, 0, 10) Then
                         Call NightscoutRecords.Add(ConvertToNightscoutGlucoseEntry(DeviceEGVRecords(i), DeviceSensorRecords(j)))
+                        MatchFound = True
                         Exit For
                     End If
                 Next
+
+                ' If an EGV record didn't have a matching Sensor record for some reason add just that part of the data.
+                If Not MatchFound Then
+                    Call NightscoutRecords.Add(ConvertToNightscoutGlucoseEntry(DeviceEGVRecords(i), Nothing))
+                End If
             Next
 
             ' Add Meter records
@@ -329,9 +428,8 @@ Public Class Synchronizer
 
         ' Deal with dates
         Dim Offset As New DateTimeOffset(EGVRecord.DisplayTime, TimeZoneInfo.Local.GetUtcOffset(EGVRecord.DisplayTime))
-        Dim Formats() As String = EGVRecord.DisplayTime.ToUniversalTime.GetDateTimeFormats("r".ToCharArray()(0))
         NightscoutEntry.date = Offset.ToUnixTimeMilliseconds
-        NightscoutEntry.dateString = Formats(0)
+        NightscoutEntry.dateString = ISO8601TimeFromDateTime(EGVRecord.DisplayTime)
 
         ' Find the trend arrow
         Select Case EGVRecord.TrendArrow
@@ -357,10 +455,13 @@ Public Class Synchronizer
         NightscoutEntry.[type] = "sgv"
         NightscoutEntry.sgv = EGVRecord.GlucoseLevel
         NightscoutEntry.noise = EGVRecord.Noise
-        NightscoutEntry.rssi = SensorRecord.RSSI
-        NightscoutEntry.filtered = SensorRecord.Filtered
-        NightscoutEntry.unfiltered = SensorRecord.Unfiltered
         NightscoutEntry.device = "WindowsUploader-DexcomShare"
+
+        If Not SensorRecord Is Nothing Then
+            NightscoutEntry.rssi = SensorRecord.RSSI
+            NightscoutEntry.filtered = SensorRecord.Filtered
+            NightscoutEntry.unfiltered = SensorRecord.Unfiltered
+        End If
 
         Return NightscoutEntry
     End Function
@@ -375,9 +476,8 @@ Public Class Synchronizer
 
         ' Deal with dates
         Dim Offset As New DateTimeOffset(MeterRecord.DisplayTime, TimeZoneInfo.Local.GetUtcOffset(MeterRecord.DisplayTime))
-        Dim Formats() As String = MeterRecord.DisplayTime.ToUniversalTime.GetDateTimeFormats("r".ToCharArray()(0))
         NightscoutEntry.date = Offset.ToUnixTimeMilliseconds
-        NightscoutEntry.dateString = Formats(0)
+        NightscoutEntry.dateString = ISO8601TimeFromDateTime(MeterRecord.DisplayTime)
 
         NightscoutEntry.[type] = "mbg"
         NightscoutEntry.mbg = MeterRecord.MeterGlucose
@@ -395,13 +495,9 @@ Public Class Synchronizer
         If ApiInformation.IsApiContractPresent("Windows.Phone.PhoneContract", 1) Then
             Dim NightscoutEntry As New NightscoutDeviceStatusEntry
 
-            ' Deal with dates
-            Dim Offset As New DateTimeOffset(DateTime.Now, TimeZoneInfo.Local.GetUtcOffset(DateTime.Now))
-            Dim Formats() As String = DateTime.Now.ToUniversalTime.GetDateTimeFormats("r".ToCharArray()(0))
-            NightscoutEntry.created_at = Formats(0)
-
             ' Get the battery report
             Dim Report As BatteryReport = (Await Battery.FromIdAsync(Windows.Devices.Power.Battery.AggregateBattery.DeviceId)).GetReport()
+            NightscoutEntry.created_at = ISO8601TimeFromDateTime(DateTime.Now)
             NightscoutEntry.uploaderBattery = CInt(CDbl(Report.RemainingCapacityInMilliwattHours.Value) / CDbl(Report.FullChargeCapacityInMilliwattHours.Value) * 100)
 
             Return NightscoutEntry
@@ -419,10 +515,8 @@ Public Class Synchronizer
         Dim NightscoutEntry As New NightscoutTreatmentEntry
 
         ' Deal with dates
-        Dim Offset As New DateTimeOffset(InsertionRecord.DisplayTime, TimeZoneInfo.Local.GetUtcOffset(InsertionRecord.DisplayTime))
-        Dim Formats() As String = InsertionRecord.DisplayTime.ToUniversalTime.GetDateTimeFormats("r".ToCharArray()(0))
-        NightscoutEntry.eventTime = Formats(0)
-        NightscoutEntry.created_at = Formats(0)
+        NightscoutEntry.eventTime = ISO8601TimeFromDateTime(InsertionRecord.DisplayTime)
+        NightscoutEntry.created_at = ISO8601TimeFromDateTime(InsertionRecord.DisplayTime)
 
         If InsertionRecord.InsertionState = InsertionDatabaseRecord.InsertionStates.Started Then
             NightscoutEntry.eventType = "Sensor Start"
@@ -469,29 +563,8 @@ Public Class Synchronizer
             GlucoseEntrySerializer.WriteObject(UploadRecordStream, NightscoutRecordsArray)
             Dim UploadRecordString As String = UTF8.GetString(UploadRecordStream.ToArray())
 
-            ' Prepare the POST reqeuest and upload to Nightscout
-            Dim HttpClient As New HttpClient
-            Dim SyncResponse As HttpResponseMessage = Nothing
-
-            Dim SyncRequest As New HttpRequestMessage
-            Call SyncRequest.Headers.Add("API-SECRET", Settings.NightscoutAPIKey)
-            SyncRequest.RequestUri = New Uri("http://" & Settings.NightscoutURL & "/api/v1/entries.json")
-            SyncRequest.Method = HttpMethod.Post
-            SyncRequest.Content = New StringContent(UploadRecordString)
-            SyncRequest.Content.Headers.ContentType = New Headers.MediaTypeHeaderValue("application/json")
-
-            Call UpdateSyncStatus("Uploading glucose entries to Nightscout...")
-
-            ' Do the upload, try three times
-            For i = 1 To 3
-                Try
-                    SyncResponse = Await HttpClient.SendAsync(SyncRequest)
-                    Success = True
-                    Exit For
-                Catch ex As Exception
-                    Success = False
-                End Try
-            Next
+            Call UpdateSyncStatus("Uploading device status to Nightscout...")
+            Success = Await PostStringToNightscout(UploadRecordString, "/api/v1/entries.json")
         Else
             Success = True
         End If
@@ -504,29 +577,8 @@ Public Class Synchronizer
             DeviceStatusEntrySerializer.WriteObject(UploadRecordStream, DeviceStatusEntries)
             Dim UploadRecordString As String = UTF8.GetString(UploadRecordStream.ToArray())
 
-            ' Prepare the POST reqeuest and upload to Nightscout
-            Dim HttpClient As New HttpClient
-            Dim SyncResponse As HttpResponseMessage = Nothing
-
-            Dim SyncRequest As New HttpRequestMessage
-            Call SyncRequest.Headers.Add("API-SECRET", Settings.NightscoutAPIKey)
-            SyncRequest.RequestUri = New Uri("http://" & Settings.NightscoutURL & "/api/v1/devicestatus.json")
-            SyncRequest.Method = HttpMethod.Post
-            SyncRequest.Content = New StringContent(UploadRecordString)
-            SyncRequest.Content.Headers.ContentType = New Headers.MediaTypeHeaderValue("application/json")
-
             Call UpdateSyncStatus("Uploading device status to Nightscout...")
-
-            ' Do the upload, try three times
-            For i = 1 To 3
-                Try
-                    SyncResponse = Await HttpClient.SendAsync(SyncRequest)
-                    Success = True
-                    Exit For
-                Catch ex As Exception
-                    Success = False
-                End Try
-            Next
+            Success = Await PostStringToNightscout(UploadRecordString, "/api/v1/devicestatus.json")
         Else
             Success = True
         End If
@@ -538,34 +590,46 @@ Public Class Synchronizer
             TreatmentEntrySerializer.WriteObject(UploadRecordStream, NightscoutRecordsArray)
             Dim UploadRecordString As String = UTF8.GetString(UploadRecordStream.ToArray())
 
-            ' Prepare the POST reqeuest and upload to Nightscout
-            Dim HttpClient As New HttpClient
-            Dim SyncResponse As HttpResponseMessage = Nothing
-
-            Dim SyncRequest As New HttpRequestMessage
-            Call SyncRequest.Headers.Add("API-SECRET", Settings.NightscoutAPIKey)
-            SyncRequest.RequestUri = New Uri("http://" & Settings.NightscoutURL & "/api/v1/treatments.json")
-            SyncRequest.Method = HttpMethod.Post
-            SyncRequest.Content = New StringContent(UploadRecordString)
-            SyncRequest.Content.Headers.ContentType = New Headers.MediaTypeHeaderValue("application/json")
-
-            Call UpdateSyncStatus("Uploading treatment entries to Nightscout...")
-
-            ' Do the upload, try three times
-            For i = 1 To 3
-                Try
-                    SyncResponse = Await HttpClient.SendAsync(SyncRequest)
-                    Success = True
-                    Exit For
-                Catch ex As Exception
-                    Success = False
-                End Try
-            Next
+            Call UpdateSyncStatus("Uploading treatments to Nightscout...")
+            Success = Await PostStringToNightscout(UploadRecordString, "/api/v1/treatments.json")
         Else
             Success = True
         End If
 
         Return Success
+    End Function
+
+    ''' <summary>
+    ''' Posts the passed string to the passed endpoint. It makes three attempts in case of bad connectivity.
+    ''' </summary>
+    ''' <param name="UploadRecordString">A string to be uploaded to the Nightscout server</param>
+    ''' <param name="NightscoutAPIEndpoint">The endpoint on the Nightscout server where the string is uploaded</param>
+    ''' <returns>True of the POST is successful, False otherwise</returns>
+    Private Shared Async Function PostStringToNightscout(ByVal UploadRecordString As String, ByVal NightscoutAPIEndpoint As String) As Task(Of Boolean)
+        Dim HttpClient As New HttpClient
+        Dim SyncResponse As HttpResponseMessage = Nothing
+
+        ' Prepare the POST reqeuest and upload to Nightscout
+        Dim SyncRequest As New HttpRequestMessage
+        Call SyncRequest.Headers.Add("API-SECRET", Settings.NightscoutAPIKey)
+        SyncRequest.RequestUri = New Uri("http://" & Settings.NightscoutURL & NightscoutAPIEndpoint)
+        SyncRequest.Method = HttpMethod.Post
+        SyncRequest.Content = New StringContent(UploadRecordString)
+        SyncRequest.Content.Headers.ContentType = New Headers.MediaTypeHeaderValue("application/json")
+
+        Call UpdateSyncStatus("Uploading treatment entries to Nightscout...")
+
+        ' Do the upload, try three times
+        For i = 1 To 3
+            Try
+                SyncResponse = Await HttpClient.SendAsync(SyncRequest)
+                Return SyncResponse.IsSuccessStatusCode
+            Catch ex As Exception
+                Return False
+            End Try
+        Next
+
+        Return False
     End Function
 
     ''' <summary>
@@ -584,5 +648,17 @@ Public Class Synchronizer
     ''' <returns>The number of seconds since January 1, 1970 00:00:00 at GMT</returns>
     Private Shared Function UnixEpochFromDateTime(ByVal RealTime As DateTime) As Double
         Return ((RealTime.Ticks / TimeSpan.TicksPerSecond) - ((New DateTime(1970, 1, 1)).Ticks / TimeSpan.TicksPerSecond))
+    End Function
+
+    ''' <summary>
+    ''' 
+    ''' </summary>
+    ''' <param name="RealTime"></param>
+    ''' <returns></returns>
+    Private Shared Function ISO8601TimeFromDateTime(ByVal RealTime As DateTime) As String
+        ' Deal with dates
+        Dim Offset As New DateTimeOffset(RealTime, TimeZoneInfo.Local.GetUtcOffset(RealTime))
+        Dim Formats() As String = DateTime.Now.ToUniversalTime.GetDateTimeFormats("o".ToCharArray()(0))
+        Return Formats(0)
     End Function
 End Class

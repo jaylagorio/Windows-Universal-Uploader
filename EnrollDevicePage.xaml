@@ -10,7 +10,8 @@
     PrimaryButtonText="OK"
     SecondaryButtonText="Cancel"
     PrimaryButtonClick="ContentDialog_PrimaryButtonClick"
-    SecondaryButtonClick="ContentDialog_SecondaryButtonClick" Loaded="ContentDialog_Loaded">
+    SecondaryButtonClick="ContentDialog_SecondaryButtonClick"
+    Loaded="ContentDialog_Loaded">
 
     <Grid>
         <StackPanel Orientation="Vertical">
@@ -31,7 +32,7 @@
             <StackPanel Orientation="Vertical" x:Name="pnlSelectDevice">
                 <TextBlock Text="Select device:"/>
                 <ListBox x:Name="lstConnectedDevices" Margin="10,0,0,0" IsEnabled="False">
-                    <ListBoxItem Content="(No new devices found)"/>
+                    <ListBoxItem Content="Looking for new devices..."/>
                 </ListBox>
             </StackPanel>
             <Line Height="10px"/>

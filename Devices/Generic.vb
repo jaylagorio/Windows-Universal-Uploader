@@ -2,7 +2,7 @@
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 15, 2016
+''' Date: May 29, 2016
 ''' Summary: A Generic device class used to load devices from settings storage.
 ''' </summary>
 
@@ -92,7 +92,7 @@
     ''' <returns>False</returns>
     Public Overrides Async Function IsConnected() As Task(Of Boolean)
         ' Make an Await call to defeat the compiler warning about the Async marking on the function.
-        Await Task.Yield
+        Await Task.Yield()
         Return False
     End Function
 End Class
