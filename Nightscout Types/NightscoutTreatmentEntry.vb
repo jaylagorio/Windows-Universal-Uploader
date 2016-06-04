@@ -17,6 +17,9 @@
     <DataMember(EmitDefaultValue:=False)> Public Property eventTime As String
     <DataMember(EmitDefaultValue:=False)> Public Property created_at As String
     <DataMember(EmitDefaultValue:=False)> Public Property eventType As String
+    <DataMember(EmitDefaultValue:=False)> Public Property insulin As Double
+    <DataMember(EmitDefaultValue:=False)> Public Property carbs As Double
+    <DataMember(EmitDefaultValue:=False)> Public Property glucose As Double
     <DataMember(EmitDefaultValue:=False)> Public Property enteredBy As String
     <DataMember(EmitDefaultValue:=False)> Public Property reason As String
     <DataMember(EmitDefaultValue:=False)> Public Property duration As Integer

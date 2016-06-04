@@ -7,7 +7,7 @@ Imports Windows.Security.Cryptography.Core
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 29, 2016
+''' Date: June 5, 2016
 ''' Summary: Exposes a quick and easy way to save and retrieve settings. Data is saved as Roaming Settings, allowing the 
 ''' user to move from system to system while being able to sync devices that have been enrolled on any other system.
 ''' </summary>
@@ -18,6 +18,16 @@ Public Class Settings
 
     ' Collection of Devices currently enrolled
     Private Shared pDevices As New Collection(Of Device)
+
+    ' Keys for the settings Key/Value pairs
+    Private Const FirstRunSetupDoneKey As String = "FirstRunSetupDone"
+    Private Const NightscoutURLKey As String = "NightscoutURL"
+    Private Const NightscoutSecretKey As String = "NightscoutSecret"
+    Private Const LastSyncTimeKey As String = "LastSyncTime"
+    Private Const LastRecordTimestampKey As String = "LastRecordTimestamp"
+    Private Const UploadIntervalKey As String = "UploadInterval"
+    Private Const EnrolledDevicesKey As String = "EnrolledDevices"
+    Private Const UseSecureUploadConnectionKey As String = "UseSecureUploadConnection"
 
     ''' <summary>
     ''' Initializes the class to store/retrieve settings.
@@ -31,13 +41,14 @@ Public Class Settings
     ''' Clears all settings for the user.
     ''' </summary>
     Public Shared Sub ClearSettings()
-        pSettingsContainer.Values.Remove("FirstRunSetupDone")
-        pSettingsContainer.Values.Remove("NightscoutURL")
-        pSettingsContainer.Values.Remove("NightscoutSecret")
-        pSettingsContainer.Values.Remove("LastSyncTime")
-        pSettingsContainer.Values.Remove("LastRecordTimestamp")
-        pSettingsContainer.Values.Remove("UploadInterval")
-        pSettingsContainer.Values.Remove("EnrolledDevices")
+        pSettingsContainer.Values.Remove(FirstRunSetupDoneKey)
+        pSettingsContainer.Values.Remove(NightscoutURLKey)
+        pSettingsContainer.Values.Remove(NightscoutSecretKey)
+        pSettingsContainer.Values.Remove(LastSyncTimeKey)
+        pSettingsContainer.Values.Remove(LastRecordTimestampKey)
+        pSettingsContainer.Values.Remove(UploadIntervalKey)
+        pSettingsContainer.Values.Remove(EnrolledDevicesKey)
+        pSettingsContainer.Values.Remove(UseSecureUploadConnectionKey)
         pDevices = New Collection(Of Device)
     End Sub
 
@@ -48,13 +59,13 @@ Public Class Settings
     Public Shared Property FirstRunSetupDone As Boolean
         Get
             Try
-                Return CBool(pSettingsContainer.Values("FirstRunSetupDone"))
+                Return CBool(pSettingsContainer.Values(FirstRunSetupDoneKey))
             Catch ex As Exception
                 Return False
             End Try
         End Get
         Set(value As Boolean)
-            pSettingsContainer.Values("FirstRunSetupDone") = value
+            pSettingsContainer.Values(FirstRunSetupDoneKey) = value
         End Set
     End Property
 
@@ -65,13 +76,13 @@ Public Class Settings
     Public Shared Property LastSyncTime As DateTime
         Get
             Try
-                Return DateTime.Parse(pSettingsContainer.Values("LastSyncTime"))
+                Return DateTime.Parse(pSettingsContainer.Values(LastSyncTimeKey))
             Catch ex As Exception
                 Return DateTime.MinValue
             End Try
         End Get
         Set(value As DateTime)
-            pSettingsContainer.Values("LastSyncTime") = value.ToString
+            pSettingsContainer.Values(LastSyncTimeKey) = value.ToString
         End Set
     End Property
 
@@ -82,13 +93,13 @@ Public Class Settings
     Public Shared Property NightscoutURL As String
         Get
             Try
-                Return pSettingsContainer.Values("NightscoutURL")
+                Return pSettingsContainer.Values(NightscoutURLKey)
             Catch ex As Exception
                 Return ""
             End Try
         End Get
         Set(value As String)
-            pSettingsContainer.Values("NightscoutURL") = value
+            pSettingsContainer.Values(NightscoutURLKey) = value
         End Set
     End Property
 
@@ -100,7 +111,7 @@ Public Class Settings
     Public Shared Property NightscoutAPIKey As String
         Get
             Try
-                Return pSettingsContainer.Values("NightscoutSecret")
+                Return pSettingsContainer.Values(NightscoutSecretKey)
             Catch ex As KeyNotFoundException
                 Return ""
             End Try
@@ -120,7 +131,7 @@ Public Class Settings
                 SHA1String &= Hex
             Next
 
-            pSettingsContainer.Values("NightscoutSecret") = SHA1String.ToLower()
+            pSettingsContainer.Values(NightscoutSecretKey) = SHA1String.ToLower()
         End Set
     End Property
 
@@ -131,13 +142,30 @@ Public Class Settings
     Public Shared Property UploadInterval As Integer
         Get
             Try
-                Return pSettingsContainer.Values("UploadInterval")
+                Return pSettingsContainer.Values(UploadIntervalKey)
             Catch ex As KeyNotFoundException
                 Return 5
             End Try
         End Get
         Set(value As Integer)
-            pSettingsContainer.Values("UploadInterval") = value
+            pSettingsContainer.Values(UploadIntervalKey) = value
+        End Set
+    End Property
+
+    ''' <summary>
+    ''' Sets whether to use HTTP or HTTPS when uploading to Nightscout
+    ''' </summary>
+    ''' <returns>True makes the sync process use HTTPS, False uses HTTP</returns>
+    Public Shared Property UseSecureUploadConnection As Boolean
+        Get
+            Try
+                Return CBool(pSettingsContainer.Values(UseSecureUploadConnectionKey))
+            Catch ex As Exception
+                Return False
+            End Try
+        End Get
+        Set(value As Boolean)
+            pSettingsContainer.Values(UseSecureUploadConnectionKey) = value
         End Set
     End Property
 
@@ -184,7 +212,7 @@ Public Class Settings
         Dim DeviceJson As String = UTF8.GetString(DeviceJsonStream.ToArray())
 
         ' Store new JSON
-        pSettingsContainer.Values("EnrolledDevices") &= DeviceJson
+        pSettingsContainer.Values(EnrolledDevicesKey) &= DeviceJson
     End Sub
 
     ''' <summary>
@@ -228,7 +256,7 @@ Public Class Settings
                 DevicesJson &= UTF8.GetString(DeviceJsonStream.ToArray())
             Next
 
-            pSettingsContainer.Values("EnrolledDevices") = DevicesJson
+            pSettingsContainer.Values(EnrolledDevicesKey) = DevicesJson
         End If
     End Sub
 
@@ -239,7 +267,7 @@ Public Class Settings
         ' If the OOBE steps haven't been run then we don't have anything to load
         If Not FirstRunSetupDone Then Return
 
-        Dim DeviceJson As String = pSettingsContainer.Values("EnrolledDevices").ToString.Trim()
+        Dim DeviceJson As String = pSettingsContainer.Values(EnrolledDevicesKey).ToString.Trim()
         If DeviceJson <> "" Then
             ' Load and deserialize the stream and pull the first Device object off
             Dim DeviceJsonStream As New MemoryStream(UTF8.GetBytes(DeviceJson))

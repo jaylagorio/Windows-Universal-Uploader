@@ -1,6 +1,6 @@
 ﻿''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 15, 2016
+''' Date: June 5, 2016
 ''' Summary: Allows the user to change the Nighscout host, API Secret, and sync timer interval.
 ''' </summary>
 
@@ -32,6 +32,8 @@ Public NotInheritable Class SettingsPage
                 lstSyncInterval.SelectedIndex = i
             End If
         Next
+
+        chkSecureConnection.IsChecked = Settings.UseSecureUploadConnection
     End Sub
 
     ''' <summary>
@@ -58,6 +60,7 @@ Public NotInheritable Class SettingsPage
             Settings.NightscoutAPIKey = txtNightscoutSecret.Text
         End If
         Settings.UploadInterval = lstSyncInterval.SelectedItem.Tag
+        Settings.UseSecureUploadConnection = chkSecureConnection.IsChecked
 
         Call Me.Hide()
     End Sub

@@ -9,7 +9,7 @@ Imports System.Runtime.Serialization.Json
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 29, 2016
+''' Date: June 5, 2016
 ''' Summary: A singleton class that syncs all connected and enrolled devices with Nightscout.
 ''' </summary>
 
@@ -21,10 +21,10 @@ Public Class Synchronizer
     Private Shared pMainPage As MainPage = Nothing
 
     ' The ProgressRing shown/hidden depending on whether synchronization is in progress.
-    Private Shared pProgressRing As ProgressRing = Nothing
+    Private Shared pProgressRings() As ProgressRing = Nothing
 
     ' The TextBlock where status messages are displayed.
-    Private Shared pStatusTextBlock As TextBlock = Nothing
+    Private Shared pStatusTextBlocks() As TextBlock = Nothing
 
     ' Indicates whether the synchronization process is running or not.
     Private Shared pSyncRunning As Boolean = False
@@ -43,17 +43,25 @@ Public Class Synchronizer
     ''' Initializes user controls so they can be updated when synchronization is running
     ''' </summary>
     ''' <param name="MainPage">An instance of MainPage to run user component update operations on</param>
-    ''' <param name="ProgressRing">A ProgressRing to show or hide depending on sync status</param>
-    ''' <param name="StatusTextBlock">A TextBlock to update when different stages of sync are reached</param>
+    ''' <param name="ProgressRings">An array of ProgressRings to show or hide depending on sync status</param>
+    ''' <param name="StatusTextBlocks">An array of TextBlocks to update when different stages of sync are reached</param>
     ''' <param name="LastSyncTime">A DateTime representing the last time a sync attempt was made</param>
-    Shared Sub Initialize(MainPage As MainPage, ProgressRing As ProgressRing, StatusTextBlock As TextBlock, ByVal LastSyncTime As DateTime)
+    Shared Sub Initialize(MainPage As MainPage, ProgressRings() As ProgressRing, StatusTextBlocks() As TextBlock, ByVal LastSyncTime As DateTime)
         pMainPage = MainPage
-        pProgressRing = ProgressRing
-        pStatusTextBlock = StatusTextBlock
+        pProgressRings = ProgressRings
+        pStatusTextBlocks = StatusTextBlocks
         If LastSyncTime = DateTime.MinValue Then
-            pStatusTextBlock.Text = "Last sync time: Never"
+            For i = 0 To pStatusTextBlocks.Count - 1
+                If Not pStatusTextBlocks(i) Is Nothing Then
+                    pStatusTextBlocks(i).Text = "Last sync time: Never"
+                End If
+            Next
         Else
-            pStatusTextBlock.Text = "Last sync time: " & LastSyncTime.ToString
+            For i = 0 To pStatusTextBlocks.Count - 1
+                If Not pStatusTextBlocks(i) Is Nothing Then
+                    pStatusTextBlocks(i).Text = "Last sync time: " & LastSyncTime.ToString
+                End If
+            Next
         End If
     End Sub
 
@@ -151,15 +159,22 @@ Public Class Synchronizer
         ' Run the following code on the UI thread to indicate changes in synchronization status.
         Await pMainPage.Dispatcher.RunAsync _
         (Windows.UI.Core.CoreDispatcherPriority.Normal, Sub()
-                                                            If (Not pProgressRing Is Nothing) And (Not pStatusTextBlock Is Nothing) Then
-                                                                If SyncInProgress Then
-                                                                    pProgressRing.Visibility = Visibility.Visible
-                                                                Else
-                                                                    pProgressRing.Visibility = Visibility.Collapsed
+                                                            For i = 0 To pProgressRings.Count - 1
+                                                                If Not pProgressRings(i) Is Nothing Then
+                                                                    If SyncInProgress Then
+                                                                        pProgressRings(i).Visibility = Visibility.Visible
+                                                                    Else
+                                                                        pProgressRings(i).Visibility = Visibility.Collapsed
+                                                                    End If
+                                                                    pProgressRings(i).IsActive = SyncInProgress
                                                                 End If
-                                                                pProgressRing.IsActive = SyncInProgress
-                                                                pStatusTextBlock.Text = StatusMessage
-                                                            End If
+                                                            Next
+
+                                                            For i = 0 To pStatusTextBlocks.Count - 1
+                                                                If Not pStatusTextBlocks(i) Is Nothing Then
+                                                                    pStatusTextBlocks(i).Text = StatusMessage
+                                                                End If
+                                                            Next
                                                         End Sub)
     End Sub
 
@@ -261,7 +276,14 @@ Public Class Synchronizer
     Private Shared Async Function GetLastNightscoutSyncTime() As Task(Of DateTime)
         ' Attempt to get the latest entry entered into Nightscout
         Dim WebClient As New HttpClient()
-        Dim SingleEntryUri As Uri = New Uri("http://" & Settings.NightscoutURL & "/api/v1/entries.json?count=1")
+
+        Dim SingleEntryUri As Uri
+        If Settings.UseSecureUploadConnection Then
+            SingleEntryUri = New Uri("https://" & Settings.NightscoutURL & "/api/v1/entries.json?count=1")
+        Else
+            SingleEntryUri = New Uri("http://" & Settings.NightscoutURL & "/api/v1/entries.json?count=1")
+        End If
+
         Dim EntriesString As String = ""
         Try
             EntriesString = Await WebClient.GetStringAsync(SingleEntryUri)
@@ -332,7 +354,7 @@ Public Class Synchronizer
 
         ' Get all of the records from the last entry time, convert each record to a Nightscout record
         Try
-            Call UpdateSyncStatus("Reading " & SyncDevice.Manufacturer & " " & SyncDevice.Model & " Sensor Data...")
+            Call UpdateSyncStatus("Reading " & SyncDevice.Manufacturer & " " & SyncDevice.Model & " Sensor Data... 20%")
             Dim DeviceEGVRecords As Collection(Of DatabaseRecord) = Await SyncDevice.DexcomReceiver.GetDatabaseContents(DatabasePartitions.EGVData, LastEntryTime)
 
             ' Check to see if the sync was cancelled.
@@ -341,6 +363,7 @@ Public Class Synchronizer
                 Return NightscoutRecords
             End If
 
+            Call UpdateSyncStatus("Reading " & SyncDevice.Manufacturer & " " & SyncDevice.Model & " Sensor Data... 40%")
             Dim DeviceSensorRecords As Collection(Of DatabaseRecord) = Await SyncDevice.DexcomReceiver.GetDatabaseContents(DatabasePartitions.SensorData, LastEntryTime)
 
             ' Check to see if the sync was cancelled.
@@ -349,7 +372,7 @@ Public Class Synchronizer
                 Return NightscoutRecords
             End If
 
-            Call UpdateSyncStatus("Reading " & SyncDevice.Manufacturer & " " & SyncDevice.Model & " Meter Data...")
+            Call UpdateSyncStatus("Reading " & SyncDevice.Manufacturer & " " & SyncDevice.Model & " Meter Data... 60%")
             Dim DeviceMeterRecords As Collection(Of DatabaseRecord) = Await SyncDevice.DexcomReceiver.GetDatabaseContents(DatabasePartitions.MeterData, LastEntryTime)
 
             ' Check to see if the sync was cancelled.
@@ -358,7 +381,7 @@ Public Class Synchronizer
                 Return NightscoutRecords
             End If
 
-            Call UpdateSyncStatus("Reading " & SyncDevice.Manufacturer & " " & SyncDevice.Model & " Insertion Data...")
+            Call UpdateSyncStatus("Reading " & SyncDevice.Manufacturer & " " & SyncDevice.Model & " Insertion Data... 80%")
             Dim DeviceInsertionRecords As Collection(Of DatabaseRecord) = Await SyncDevice.DexcomReceiver.GetDatabaseContents(DatabasePartitions.InsertionTime, LastEntryTime)
 
             ' Check to see if the sync was cancelled.
@@ -371,13 +394,17 @@ Public Class Synchronizer
             ' Match based on whether the EGV record and Sensor records are within 10 seconds of each other.
             For i = 0 To DeviceEGVRecords.Count - 1
                 Dim MatchFound As Boolean = False
-                For j = 0 To DeviceSensorRecords.Count - 1
-                    If (DeviceEGVRecords(i).SystemTime - DeviceSensorRecords(j).SystemTime).Duration() <= New TimeSpan(0, 0, 10) Then
-                        Call NightscoutRecords.Add(ConvertToNightscoutGlucoseEntry(DeviceEGVRecords(i), DeviceSensorRecords(j)))
+                Dim CurrentSensorRecord As Integer = 0
+                While CurrentSensorRecord < DeviceSensorRecords.Count
+                    If (DeviceEGVRecords(i).SystemTime - DeviceSensorRecords(CurrentSensorRecord).SystemTime).Duration() <= New TimeSpan(0, 0, 10) Then
+                        Call NightscoutRecords.Add(ConvertToNightscoutGlucoseEntry(DeviceEGVRecords(i), DeviceSensorRecords(CurrentSensorRecord)))
+                        'Call DeviceSensorRecords.RemoveAt(CurrentSensorRecord)
                         MatchFound = True
-                        Exit For
+                        Exit While
+                    Else
+                        CurrentSensorRecord += 1
                     End If
-                Next
+                End While
 
                 ' If an EGV record didn't have a matching Sensor record for some reason add just that part of the data.
                 If Not MatchFound Then
@@ -612,12 +639,14 @@ Public Class Synchronizer
         ' Prepare the POST reqeuest and upload to Nightscout
         Dim SyncRequest As New HttpRequestMessage
         Call SyncRequest.Headers.Add("API-SECRET", Settings.NightscoutAPIKey)
-        SyncRequest.RequestUri = New Uri("http://" & Settings.NightscoutURL & NightscoutAPIEndpoint)
+        If Settings.UseSecureUploadConnection Then
+            SyncRequest.RequestUri = New Uri("https://" & Settings.NightscoutURL & NightscoutAPIEndpoint)
+        Else
+            SyncRequest.RequestUri = New Uri("http://" & Settings.NightscoutURL & NightscoutAPIEndpoint)
+        End If
         SyncRequest.Method = HttpMethod.Post
         SyncRequest.Content = New StringContent(UploadRecordString)
         SyncRequest.Content.Headers.ContentType = New Headers.MediaTypeHeaderValue("application/json")
-
-        Call UpdateSyncStatus("Uploading treatment entries to Nightscout...")
 
         ' Do the upload, try three times
         For i = 1 To 3

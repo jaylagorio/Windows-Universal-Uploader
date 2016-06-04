@@ -7,11 +7,11 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d" Loaded="MainPage_Loaded" GotFocus="MainPage_GotFocus" LostFocus="MainPage_LostFocus" Tapped="MainPage_Tapped">
     <Page.TopAppBar>
-        <CommandBar>
+        <CommandBar x:Name="TopCommandBar">
             <CommandBar.Content>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="12,14,0,0">
-                    <ProgressRing x:Name="prgSyncing" Visibility="Collapsed" Margin="0,0,10,0"/>
-                    <TextBlock x:Name="lblSyncStatus" Text="Last Sync: Never"/>
+                <StackPanel x:Name="TopSyncStatus" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="12,14,0,0" Visibility="Collapsed">
+                    <ProgressRing x:Name="prgTopSyncing" Visibility="Collapsed" Margin="0,0,10,0"/>
+                    <TextBlock x:Name="lblTopSyncStatus" Text="Last Sync: Never"/>
                 </StackPanel>
             </CommandBar.Content>
             <CommandBar.PrimaryCommands>
@@ -21,14 +21,53 @@
                 <AppBarButton x:Name="cmdSyncNow" Icon="Sync" Label="Sync Now"/>
                 <AppBarButton x:Name="cmdCancelSync" Icon="Cancel" Label="Cancel Sync" Visibility="Collapsed"/>
                 <AppBarSeparator/>
-                <AppBarButton x:Name="cmdSettings" Icon="Setting" Label="Settings"/>
+                <AppBarButton x:Name="cmdPrimarySettings" Icon="Setting" Label="Settings"/>
             </CommandBar.PrimaryCommands>
+            <CommandBar.SecondaryCommands>
+                <AppBarButton x:Name="cmdSecondarySettings" Icon="Setting" Label="Settings"/>
+            </CommandBar.SecondaryCommands>
         </CommandBar>
     </Page.TopAppBar>
 
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup>
+                <VisualState x:Name="WideView">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="660"/>
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="TopSyncStatus.Visibility" Value="Visible"/>
+                        <Setter Target="cmdPrimarySettings.Visibility" Value="Visible"/>
+                        <Setter Target="BottomCommandBar.Visibility" Value="Collapsed"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="NarrowView">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="0"/>
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="TopSyncStatus.Visibility" Value="Collapsed"/>
+                        <Setter Target="cmdPrimarySettings.Visibility" Value="Collapsed"/>
+                        <Setter Target="BottomCommandBar.Visibility" Value="Visible"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
         <Image x:Name="SettingsDirectionImage" Source="Assets/GetStartedDirection.png" Stretch="None" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,60,0"/>
         <Image x:Name="PlaceHolderImage" Source="Assets/NightscoutFullLogo.png" Stretch="None"/>
         <WebView x:Name="CenterWebView" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
     </Grid>
+
+    <Page.BottomAppBar>
+        <CommandBar x:Name="BottomCommandBar" Visibility="Collapsed">
+            <CommandBar.Content>
+                <StackPanel x:Name="BottomSyncStatus" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12,10,0,0">
+                    <ProgressRing x:Name="prgBottomSyncing" Visibility="Collapsed" Margin="0,0,10,0"/>
+                    <TextBlock x:Name="lblBottomSyncStatus" Text="Last Sync: Never"/>
+                </StackPanel>
+            </CommandBar.Content>
+        </CommandBar>
+    </Page.BottomAppBar>
 </Page>

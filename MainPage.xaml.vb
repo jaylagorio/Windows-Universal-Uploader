@@ -1,6 +1,6 @@
 ﻿''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 29, 2016
+''' Date: June 5, 2016
 ''' Summary: MainPage serves as the primary display window for the app.
 ''' </summary>
 
@@ -53,7 +53,7 @@ Public NotInheritable Class MainPage
     ''' </summary>
     Private Sub InitializeLayout()
         ' Initialize the synchronization engine so it can find the UI thread and the sync progress controls
-        Call Synchronizer.Initialize(Me, Me.prgSyncing, Me.lblSyncStatus, Settings.LastSyncTime)
+        Call Synchronizer.Initialize(Me, {prgTopSyncing, prgBottomSyncing}, {lblTopSyncStatus, lblBottomSyncStatus}, Settings.LastSyncTime)
 
         ' Set the CommandBar button state based on settings
         Call SetDeviceButtonState()
@@ -181,7 +181,7 @@ Public NotInheritable Class MainPage
     ''' <summary>
     ''' The Settings button in the CommandBar.
     ''' </summary>
-    Private Async Sub cmdSettings_Click(sender As Object, e As RoutedEventArgs) Handles cmdSettings.Click
+    Private Async Sub cmdSettings_Click(sender As Object, e As RoutedEventArgs) Handles cmdPrimarySettings.Click, cmdSecondarySettings.Click
         Call Synchronizer.StopTimer()
 
         Dim PreviousUploadInterval As Integer = Settings.UploadInterval
@@ -205,7 +205,8 @@ Public NotInheritable Class MainPage
         ' Only enable the Device List button if there are devices enrolled
         cmdAddDevice.IsEnabled = Not Synchronizer.IsSynchronizing
         cmdDeviceList.IsEnabled = (Settings.EnrolledDevices.Count > 0) And (Not Synchronizer.IsSynchronizing)
-        cmdSettings.IsEnabled = Not Synchronizer.IsSynchronizing
+        cmdPrimarySettings.IsEnabled = Not Synchronizer.IsSynchronizing
+        cmdSecondarySettings.IsEnabled = Not Synchronizer.IsSynchronizing
 
         ' Alternate Sync Now/Cancel Sync button visibility
         If Synchronizer.IsSynchronizing Then

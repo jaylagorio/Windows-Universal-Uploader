@@ -9,11 +9,11 @@
     Title="Device List"
     PrimaryButtonText="OK"
     PrimaryButtonClick="ContentDialog_PrimaryButtonClick" Loaded="ContentDialog_Loaded">
-
+    
     <Grid>
         <ListView x:Name="lstDevices" ItemsSource="{Binding}" SelectionMode="None">
-            <ListView.ItemTemplate>
-                <DataTemplate>
+            <!-- <ListView.ItemTemplate>
+                <DataTemplate x:Name="WideFormat">
                     <StackPanel Orientation="Horizontal" Margin="0,10,0,10" VerticalAlignment="Center" HorizontalAlignment="Stretch">
                         <Image Margin="0,0,0,0" Source="{Binding ThumbnailAssetSource}"/>
                         <TextBlock Margin="10,7,0,0" Text="{Binding DisplayName}"/>
@@ -22,13 +22,22 @@
                         <Button Margin="10,0,0,0" Content="Remove" Click="RemoveButton_Click" Tag="{Binding SerialNumber}"/>
                     </StackPanel>
                 </DataTemplate>
+            </ListView.ItemTemplate>-->
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,10" VerticalAlignment="Center" HorizontalAlignment="Stretch" BorderThickness="1">
+                        <StackPanel Orientation="Vertical" HorizontalAlignment="Left">
+                            <Image Margin="0,0,0,0" Source="{Binding ThumbnailAssetSource}"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,7,0,0">
+                                <TextBlock Margin="0,0,0,0" Text="{Binding InterfaceName}"/>
+                                <TextBlock Margin="5,0,0,0" Text="{Binding SerialNumber}"/>
+                            </StackPanel>
+                        </StackPanel>
+                        
+                        <Button Margin="15,0,0,0" Content="Remove" Click="RemoveButton_Click" Tag="{Binding SerialNumber}" HorizontalAlignment="Right"/>
+                    </StackPanel>
+                </DataTemplate>
             </ListView.ItemTemplate>
-            <!--<ListViewHeaderItem>
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="Device" Margin="0,0,0,0"/>
-                    <TextBlock Text="Connected" Margin="10,0,0,0"/>
-                </StackPanel>
-            </ListViewHeaderItem>-->
         </ListView>
     </Grid>
 </ContentDialog>
