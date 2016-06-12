@@ -1,6 +1,6 @@
 ﻿''' <summary>
 ''' Author: Jay Lagorio
-''' Date: June 5, 2016
+''' Date: June 12, 2016
 ''' Summary: MainPage serves as the primary display window for the app.
 ''' </summary>
 
@@ -68,7 +68,11 @@ Public NotInheritable Class MainPage
             CenterWebView.HorizontalAlignment = HorizontalAlignment.Stretch
             CenterWebView.Visibility = Visibility.Visible
 
-            CenterWebView.Navigate(New Uri("http://" & Settings.NightscoutURL, UriKind.Absolute))
+            If Settings.UseSecureUploadConnection Then
+                Call CenterWebView.Navigate(New Uri("https://" & Settings.NightscoutURL, UriKind.Absolute))
+            Else
+                Call CenterWebView.Navigate(New Uri("http://" & Settings.NightscoutURL, UriKind.Absolute))
+            End If
         Else
             ' If the Nightscout URL hasn't been enetered the primary WebView is pretty
             ' useless. Collapse the WebView and show some image assets to prompt
@@ -199,12 +203,26 @@ Public NotInheritable Class MainPage
     End Sub
 
     ''' <summary>
+    ''' Allows the user to refresh the Nightscout web view
+    ''' </summary>
+    Private Sub cmdRefreshNightscout_Tapped(sender As Object, e As TappedRoutedEventArgs) Handles cmdRefreshNightscout.Tapped
+        If Settings.UseSecureUploadConnection Then
+            Call CenterWebView.Navigate(New Uri("https://" & Settings.NightscoutURL, UriKind.Absolute))
+            Call CenterWebView.Refresh()
+        Else
+            Call CenterWebView.Navigate(New Uri("http://" & Settings.NightscoutURL, UriKind.Absolute))
+            Call CenterWebView.Refresh()
+        End If
+    End Sub
+
+    ''' <summary>
     ''' Determine the enabled state of the CommandBar buttons.
     ''' </summary>
     Private Sub SetDeviceButtonState()
-        ' Only enable the Device List button if there are devices enrolled
-        cmdAddDevice.IsEnabled = Not Synchronizer.IsSynchronizing
+        ' Only enable the Device List button if there are devices enrolled and we're not syncing
         cmdDeviceList.IsEnabled = (Settings.EnrolledDevices.Count > 0) And (Not Synchronizer.IsSynchronizing)
+
+        cmdAddDevice.IsEnabled = Not Synchronizer.IsSynchronizing
         cmdPrimarySettings.IsEnabled = Not Synchronizer.IsSynchronizing
         cmdSecondarySettings.IsEnabled = Not Synchronizer.IsSynchronizing
 
@@ -218,10 +236,17 @@ Public NotInheritable Class MainPage
         End If
 
         ' Only enable the Sync button if there are devices enrolled and we're
-        ' not syncing right now
+        ' not syncing right now. Only show the Refresh Nightscout option if the
+        ' address has been set.
         If Settings.NightscoutAPIKey <> "" And Settings.NightscoutURL <> "" Then
+            cmdRefreshNightscout.Visibility = Visibility.Visible
             cmdSyncNow.IsEnabled = (Settings.EnrolledDevices.Count > 0) And (Not Synchronizer.IsSynchronizing)
         Else
+            If Settings.NightscoutURL <> "" Then
+                cmdRefreshNightscout.Visibility = Visibility.Visible
+            Else
+                cmdRefreshNightscout.Visibility = Visibility.Collapsed
+            End If
             cmdSyncNow.IsEnabled = False
         End If
     End Sub

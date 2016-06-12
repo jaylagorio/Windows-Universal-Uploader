@@ -1,8 +1,9 @@
 ﻿Imports Windows.UI.Popups
+Imports Microsoft.ApplicationInsights
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 22, 2016
+''' Date: June 12, 2016
 ''' Summary: Shows the user a list of currently enrolled devices and allows them to remove any that are no longer needed.
 ''' </summary>
 
@@ -52,7 +53,17 @@ Public NotInheritable Class DeviceListPage
             Dim DeviceList As Collection(Of Device) = Settings.EnrolledDevices
             For i = 0 To DeviceList.Count - 1
                 If DeviceList(i).SerialNumber = SerialNumber Then
+                    If Not Await DeviceList(i).IsConnected Then
+                        If Await DeviceList(i).Connect() Then
+                            Call ReportDeviceRemovalTelemetry(DeviceList(i))
+                            Await DeviceList(i).Disconnect()
+                        End If
+                    Else
+                        Call ReportDeviceRemovalTelemetry(DeviceList(i))
+                    End If
+
                     Settings.RemoveEnrolledDevice(DeviceList(i))
+
                     Call ListEnrolledDevices()
                     Exit For
                 End If
@@ -63,5 +74,28 @@ Public NotInheritable Class DeviceListPage
         If Settings.EnrolledDevices.Count = 0 Then
             Me.Hide()
         End If
+    End Sub
+
+    ''' <summary>
+    ''' 
+    ''' </summary>
+    ''' <param name="NewDevice"></param>
+    Private Sub ReportDeviceRemovalTelemetry(ByRef NewDevice As DexcomDevice)
+        Dim ApplicationInsights As New TelemetryClient
+        Dim EventProperties As New Dictionary(Of String, String)
+
+        ' Gather device firmware data. The first call will cause the device to be queried.
+        Call EventProperties.Add("SerialNumber", NewDevice.SerialNumber)
+        Call EventProperties.Add("InterfaceName", NewDevice.InterfaceName)
+        If Not NewDevice.DexcomReceiver Is Nothing Then
+            Call EventProperties.Add("SchemaVersion", NewDevice.DexcomReceiver.SchemaVersion)
+            Call EventProperties.Add("ProductID", NewDevice.DexcomReceiver.ProductId)
+            Call EventProperties.Add("ProductName", NewDevice.DexcomReceiver.ProductName)
+            Call EventProperties.Add("SoftwareNumber", NewDevice.DexcomReceiver.SoftwareNumber)
+            Call EventProperties.Add("FirmwareVersion", NewDevice.DexcomReceiver.FirmwareVersion)
+        End If
+
+        ' Send the event to the Insights platform
+        Call ApplicationInsights.TrackEvent("Unenrolled Dexcom Device", EventProperties)
     End Sub
 End Class

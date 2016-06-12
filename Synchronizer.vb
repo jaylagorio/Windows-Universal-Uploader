@@ -9,7 +9,7 @@ Imports System.Runtime.Serialization.Json
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: June 5, 2016
+''' Date: June 12, 2016
 ''' Summary: A singleton class that syncs all connected and enrolled devices with Nightscout.
 ''' </summary>
 
@@ -323,7 +323,7 @@ Public Class Synchronizer
     End Function
 
     ''' <summary>
-    ''' Reads all entry data from Dexcom Receiver devices.
+    ''' Reads entry data from Dexcom Receiver devices starting at the passed time. To read the entire database pass DateTime.MinValue.
     ''' </summary>
     ''' <param name="SyncDevice">The connected DexcomDevice to read</param>
     ''' <param name="LastEntryTime">The farthest time to read behind</param>
@@ -390,6 +390,15 @@ Public Class Synchronizer
                 Return NightscoutRecords
             End If
 
+            Call UpdateSyncStatus("Reading " & SyncDevice.Manufacturer & " " & SyncDevice.Model & " Event Data... 100%")
+            Dim DeviceEventRecords As Collection(Of DatabaseRecord) = Await SyncDevice.DexcomReceiver.GetDatabaseContents(DatabasePartitions.UserEventData, LastEntryTime)
+
+            ' Check to see if the sync was cancelled.
+            If IsSyncCancelled() Then
+                Await SyncDevice.Disconnect()
+                Return NightscoutRecords
+            End If
+
             ' Look through the different record types and correlate the EGV and Sensor records based on time.
             ' Match based on whether the EGV record and Sensor records are within 10 seconds of each other.
             For i = 0 To DeviceEGVRecords.Count - 1
@@ -398,7 +407,7 @@ Public Class Synchronizer
                 While CurrentSensorRecord < DeviceSensorRecords.Count
                     If (DeviceEGVRecords(i).SystemTime - DeviceSensorRecords(CurrentSensorRecord).SystemTime).Duration() <= New TimeSpan(0, 0, 10) Then
                         Call NightscoutRecords.Add(ConvertToNightscoutGlucoseEntry(DeviceEGVRecords(i), DeviceSensorRecords(CurrentSensorRecord)))
-                        'Call DeviceSensorRecords.RemoveAt(CurrentSensorRecord)
+                        Call DeviceSensorRecords.RemoveAt(CurrentSensorRecord)
                         MatchFound = True
                         Exit While
                     Else
@@ -424,6 +433,60 @@ Public Class Synchronizer
                     Call NightscoutRecords.Add(TreatmentEntry)
                 End If
             Next
+
+            ' Correlate carb events and insulin events to generate combined meal entries
+            While DeviceEventRecords.Count > 0
+                Dim MatchFound As Boolean = False
+                Dim CurrentEventRecord As Integer = 1
+                While CurrentEventRecord < DeviceEventRecords.Count
+
+                    ' Entries are said to be correllated if they occured within 30 seconds of each other
+                    If (DeviceEventRecords(0).SystemTime - DeviceEventRecords(CurrentEventRecord).SystemTime).Duration() <= New TimeSpan(0, 0, 30) Then
+                        Dim EventRecord0 As UserEventDatabaseRecord = DeviceEventRecords(0)
+                        Dim EventRecordCurrent As UserEventDatabaseRecord = DeviceEventRecords(CurrentEventRecord)
+
+                        ' If either of the events are Carbs or Insulin merge them together into one item
+                        If (EventRecord0.EventType = UserEventDatabaseRecord.EventTypes.Carbs Or EventRecord0.EventType = UserEventDatabaseRecord.EventTypes.Insulin) And (EventRecordCurrent.EventType = UserEventDatabaseRecord.EventTypes.Insulin Or EventRecordCurrent.EventType = UserEventDatabaseRecord.EventTypes.Carbs) Then
+                            Dim TreatementEntry0 As NightscoutTreatmentEntry = ConvertToNightscoutTreatmentEntry(EventRecord0)
+                            Dim TreatementEntryCurrent As NightscoutTreatmentEntry = ConvertToNightscoutTreatmentEntry(EventRecordCurrent)
+                            TreatementEntry0.insulin += TreatementEntryCurrent.insulin
+                            TreatementEntry0.carbs += TreatementEntryCurrent.carbs
+
+                            ' Figure out the combined event type based on the insulin and carb values
+                            If TreatementEntry0.insulin > 0 And TreatementEntry0.carbs > 0 Then
+                                TreatementEntry0.eventType = "Meal Bolus"
+                            ElseIf TreatementEntry0.insulin > 0 And TreatementEntry0.carbs = 0 Then
+                                TreatementEntry0.eventType = "Correction Bolus"
+                            ElseIf TreatementEntry0.insulin = 0 And TreatementEntry0.carbs > 0 Then
+                                TreatementEntry0.eventType = "Carb Correction"
+                            End If
+
+                            ' Add the combined record and remove the two independent records
+                            Call NightscoutRecords.Add(TreatementEntry0)
+                            Call DeviceEventRecords.RemoveAt(0)
+                            Call DeviceEventRecords.RemoveAt(CurrentEventRecord)
+                            MatchFound = True
+                            Exit While
+                        End If
+                    Else
+                        CurrentEventRecord += 1
+                    End If
+                End While
+
+                ' If the UserEvent record didn't have a matching record for some reason add just that part of the data.
+                If Not MatchFound Then
+                    Dim UserEventRecord As UserEventDatabaseRecord = DeviceEventRecords(0)
+                    Dim NightscoutTreatmentEntry As NightscoutTreatmentEntry = ConvertToNightscoutTreatmentEntry(DeviceEventRecords(0))
+                    If UserEventRecord.EventType = UserEventDatabaseRecord.EventTypes.Carbs Then
+                        NightscoutTreatmentEntry.eventType = "Carb Correction"
+                    ElseIf UserEventRecord.EventType = UserEventDatabaseRecord.EventTypes.Insulin Then
+                        NightscoutTreatmentEntry.eventType = "Correction Bolus"
+                    End If
+
+                    Call NightscoutRecords.Add(NightscoutTreatmentEntry)
+                    Call DeviceEventRecords.RemoveAt(0)
+                End If
+            End While
 
             ' If there is uploader device status to report create the record
             Dim DeviceStatus As NightscoutDeviceStatusEntry = Await CreateDeviceStatusEntry()
@@ -534,19 +597,34 @@ Public Class Synchronizer
     End Function
 
     ''' <summary>
-    ''' Converts a Dexcom InsertionDatabaseRecord to a NightscoutTreatmentEntry record.
+    ''' Converts a Dexcom InsertionDatabaseRecord or UserEventDatabaseRecord to a NightscoutTreatmentEntry record.
     ''' </summary>
-    ''' <param name="InsertionRecord">A TreatmentDatabaseRecord read from a Dexcom device</param>
+    ''' <param name="DatabaseRecord">A DatabaseRecord, either of type InsertionDatabaseRecord or UserEventDatabaseRecord, read from a Dexcom device</param>
     ''' <returns>A NightscoutGlucoseEntry record to upload to Nightscout</returns>
-    Private Shared Function ConvertToNightscoutTreatmentEntry(ByRef InsertionRecord As InsertionDatabaseRecord) As NightscoutTreatmentEntry
+    Private Shared Function ConvertToNightscoutTreatmentEntry(ByRef DatabaseRecord As DatabaseRecord) As NightscoutTreatmentEntry
         Dim NightscoutEntry As New NightscoutTreatmentEntry
+        Dim InsertionRecord As InsertionDatabaseRecord
+        Dim UserEventRecord As UserEventDatabaseRecord
 
         ' Deal with dates
-        NightscoutEntry.eventTime = ISO8601TimeFromDateTime(InsertionRecord.DisplayTime)
-        NightscoutEntry.created_at = ISO8601TimeFromDateTime(InsertionRecord.DisplayTime)
+        NightscoutEntry.eventTime = ISO8601TimeFromDateTime(DatabaseRecord.DisplayTime)
+        NightscoutEntry.created_at = ISO8601TimeFromDateTime(DatabaseRecord.DisplayTime)
 
-        If InsertionRecord.InsertionState = InsertionDatabaseRecord.InsertionStates.Started Then
-            NightscoutEntry.eventType = "Sensor Start"
+        If DatabaseRecord.GetType() Is GetType(InsertionDatabaseRecord) Then
+            InsertionRecord = DatabaseRecord
+            If InsertionRecord.InsertionState = InsertionDatabaseRecord.InsertionStates.Started Then
+                NightscoutEntry.eventType = "Sensor Start"
+            Else
+                NightscoutEntry = Nothing
+            End If
+        ElseIf DatabaseRecord.GetType() Is GetType(UserEventDatabaseRecord) Then
+            UserEventRecord = DatabaseRecord
+            Select Case UserEventRecord.EventType
+                Case UserEventDatabaseRecord.EventTypes.Carbs
+                    NightscoutEntry.carbs = UserEventRecord.EventValue
+                Case UserEventDatabaseRecord.EventTypes.Insulin
+                    NightscoutEntry.insulin = UserEventRecord.EventValue
+            End Select
         Else
             NightscoutEntry = Nothing
         End If

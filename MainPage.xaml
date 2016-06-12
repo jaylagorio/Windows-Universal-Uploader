@@ -24,6 +24,7 @@
                 <AppBarButton x:Name="cmdPrimarySettings" Icon="Setting" Label="Settings"/>
             </CommandBar.PrimaryCommands>
             <CommandBar.SecondaryCommands>
+                <AppBarButton x:Name="cmdRefreshNightscout" Label="Refresh Nightscout"/>
                 <AppBarButton x:Name="cmdSecondarySettings" Icon="Setting" Label="Settings"/>
             </CommandBar.SecondaryCommands>
         </CommandBar>

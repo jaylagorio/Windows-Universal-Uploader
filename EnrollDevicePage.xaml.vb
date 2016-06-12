@@ -1,9 +1,9 @@
 ﻿Imports Dexcom
-Imports System.Threading
+Imports Microsoft.ApplicationInsights
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 29, 2016
+''' Date: June 12, 2016
 ''' Summary: Searches for new and unenrolled devices so the user can synchronize them with Nightscout.
 ''' </summary>
 
@@ -161,6 +161,11 @@ Public NotInheritable Class EnrollDevicePage
                         Case "BLE"
                             ' Show the serial number box
                             pnlSerialNumber.Visibility = Visibility.Visible
+                            ' Start a Dexcom device's serial number off with "SM" and give the textbox focus
+                            If txtSerialNumber.Text = "" Then
+                                txtSerialNumber.Text = "SM"
+                                txtSerialNumber.SelectionStart = txtSerialNumber.Text.Length()
+                            End If
                             Call txtSerialNumber.Focus(FocusState.Programmatic)
                     End Select
                 End If
@@ -283,6 +288,7 @@ Public NotInheritable Class EnrollDevicePage
                 NewDevice = New DexcomDevice(DeviceInterface, "", DeviceConnection.DeviceId)
                 If Await NewDevice.Connect() Then
                     Call Settings.AddEnrolledDevice(NewDevice)
+                    Call ReportNewDeviceTelemetry(NewDevice)
                     Await NewDevice.Disconnect()
                     Return True
                 End If
@@ -292,6 +298,7 @@ Public NotInheritable Class EnrollDevicePage
                 NewDevice.SerialNumber = txtSerialNumber.Text
                 If Await NewDevice.Connect() Then
                     Call Settings.AddEnrolledDevice(NewDevice)
+                    Call ReportNewDeviceTelemetry(NewDevice)
                     Await NewDevice.Disconnect()
                     Return True
                 End If
@@ -300,4 +307,28 @@ Public NotInheritable Class EnrollDevicePage
 
         Return False
     End Function
+
+    ''' <summary>
+    ''' Uses the ApplicationInsights SDK to report device information to the app publisher. This information doesn't
+    ''' identify the user and is used to find crashes and bugs after app publication.
+    ''' </summary>
+    ''' <param name="NewDevice">The newly enrolled device to report data about</param>
+    Private Sub ReportNewDeviceTelemetry(ByRef NewDevice As DexcomDevice)
+        Dim ApplicationInsights As New TelemetryClient
+        Dim EventProperties As New Dictionary(Of String, String)
+
+        ' Gather device firmware data. The first call will cause the device to be queried.
+        Call EventProperties.Add("SerialNumber", NewDevice.SerialNumber)
+        Call EventProperties.Add("InterfaceName", NewDevice.InterfaceName)
+        If Not NewDevice.DexcomReceiver Is Nothing Then
+            Call EventProperties.Add("SchemaVersion", NewDevice.DexcomReceiver.SchemaVersion)
+            Call EventProperties.Add("ProductID", NewDevice.DexcomReceiver.ProductId)
+            Call EventProperties.Add("ProductName", NewDevice.DexcomReceiver.ProductName)
+            Call EventProperties.Add("SoftwareNumber", NewDevice.DexcomReceiver.SoftwareNumber)
+            Call EventProperties.Add("FirmwareVersion", NewDevice.DexcomReceiver.FirmwareVersion)
+        End If
+
+        ' Send the event to the Insights platform
+        Call ApplicationInsights.TrackEvent("Enrolled Dexcom Device", EventProperties)
+    End Sub
 End Class
