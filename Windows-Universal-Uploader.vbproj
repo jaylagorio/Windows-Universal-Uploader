@@ -10,8 +10,8 @@
     <AssemblyName>NightscoutUploader</AssemblyName>
     <DefaultLanguage>en-US</DefaultLanguage>
     <TargetPlatformIdentifier>UAP</TargetPlatformIdentifier>
-    <TargetPlatformVersion>10.0.10586.0</TargetPlatformVersion>
-    <TargetPlatformMinVersion>10.0.10240.0</TargetPlatformMinVersion>
+    <TargetPlatformVersion>10.0.14393.0</TargetPlatformVersion>
+    <TargetPlatformMinVersion>10.0.10586.0</TargetPlatformMinVersion>
     <MinimumVisualStudioVersion>14</MinimumVisualStudioVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{A5A43C5B-DE2A-4C0C-9213-0A381AF9435A};{F184B08F-C81C-45F6-A57F-5ABD9991F28F}</ProjectTypeGuids>
@@ -104,6 +104,7 @@
     <Content Include="ApplicationInsights.config">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="VoiceCommands.xml" />
     <None Include="Package.StoreAssociation.xml" />
     <None Include="project.json" />
   </ItemGroup>
@@ -120,14 +121,10 @@
     <Compile Include="EnrollDevicePage.xaml.vb">
       <DependentUpon>EnrollDevicePage.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Nightscout Types\NightscoutDeviceStatusEntry.vb" />
-    <Compile Include="Nightscout Types\NightscoutEntry.vb" />
-    <Compile Include="Nightscout Types\NightscoutGlucoseEntry.vb" />
     <Compile Include="MainPage.xaml.vb">
       <DependentUpon>MainPage.xaml</DependentUpon>
     </Compile>
     <Compile Include="My Project\AssemblyInfo.vb" />
-    <Compile Include="Nightscout Types\NightscoutTreatmentEntry.vb" />
     <Compile Include="Settings.vb" />
     <Compile Include="SettingsPage.xaml.vb">
       <DependentUpon>SettingsPage.xaml</DependentUpon>
@@ -138,8 +135,6 @@
     <AppxManifest Include="Package.appxmanifest">
       <SubType>Designer</SubType>
     </AppxManifest>
-    <None Include="Windows-Universal-Uploader_StoreKey.pfx" />
-    <None Include="Windows-Universal-Uploader_TemporaryKey.pfx" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\DexcomReceiverIcon.png" />
@@ -211,6 +206,14 @@
     <ProjectReference Include="..\Dexcom\Dexcom.vbproj">
       <Project>{643a4389-f843-4bf6-a617-ada113c16f6f}</Project>
       <Name>Dexcom</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Nightscout\Nightscout.vbproj">
+      <Project>{c9e41f46-b4aa-498a-b9bf-beabd9565f5b}</Project>
+      <Name>Nightscout</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Windows-Universal-Uploader-Background\Windows-Universal-Uploader-Background.vbproj">
+      <Project>{1fde472c-ae80-4409-a4fc-da745a465634}</Project>
+      <Name>Windows-Universal-Uploader-Background</Name>
     </ProjectReference>
   </ItemGroup>
   <PropertyGroup Condition=" '$(VisualStudioVersion)' == '' or '$(VisualStudioVersion)' &lt; '14.0' ">

@@ -2,7 +2,7 @@
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 15, 2016
+''' Date: October 30, 2016
 ''' Summary: Device represents a generic device from which the user will read and upload data to Nightscout.
 ''' </summary>
 
@@ -13,6 +13,10 @@
 
     ' The friendly name of the device provided by the inheriting class.
     Friend pDisplayName As String
+
+    ' A variable used to indicate whether the last sync attempt was successful. Initialized to True because
+    ' a failure hasn't occured if a sync hasn't been attempted.
+    Private pLastSyncSuccess As Boolean = True
 
     ' The type of data the device provides. One or many options can be set.
     Public Enum DeviceTypes
@@ -92,6 +96,22 @@
         Get
             Return pDeviceId
         End Get
+    End Property
+
+    ''' <summary>
+    ''' Used to indicate whether the last sync attempt failed. This is initialized to True
+    ''' because never having attempted a sync means it couldn't have failed. This property is
+    ''' entirely up to the calling app to manage and doesn't in any way influence the operation
+    ''' of a Device.
+    ''' </summary>
+    ''' <returns>True if never synced or the last sync attempt was successful, False if the last sync attempt failed.</returns>
+    Public Property LastSyncSuccess As Boolean
+        Get
+            Return pLastSyncSuccess
+        End Get
+        Set(value As Boolean)
+            pLastSyncSuccess = value
+        End Set
     End Property
 
     ''' <summary>

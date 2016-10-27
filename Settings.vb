@@ -7,7 +7,7 @@ Imports Windows.Security.Cryptography.Core
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: June 5, 2016
+''' Date: October 30, 2016
 ''' Summary: Exposes a quick and easy way to save and retrieve settings. Data is saved as Roaming Settings, allowing the 
 ''' user to move from system to system while being able to sync devices that have been enrolled on any other system.
 ''' </summary>
@@ -21,6 +21,7 @@ Public Class Settings
 
     ' Keys for the settings Key/Value pairs
     Private Const FirstRunSetupDoneKey As String = "FirstRunSetupDone"
+    Private Const FirstRunSettingsSavedKey As String = "FirstRunSettingsSaved"
     Private Const NightscoutURLKey As String = "NightscoutURL"
     Private Const NightscoutSecretKey As String = "NightscoutSecret"
     Private Const LastSyncTimeKey As String = "LastSyncTime"
@@ -28,12 +29,37 @@ Public Class Settings
     Private Const UploadIntervalKey As String = "UploadInterval"
     Private Const EnrolledDevicesKey As String = "EnrolledDevices"
     Private Const UseSecureUploadConnectionKey As String = "UseSecureUploadConnection"
+    Private Const UseRoamingSettingsKey As String = "UseRoamingSettings"
+    Private Const ScreenBehaviorKey As String = "ScreenBehavior"
+
+    ' Behavior for the screen depending on battery/power situation
+    Public Enum ScreenBehavior
+        NormalScreenBehavior = 0        ' Follows the device's power settings
+        KeepScreenOnWhenPluggedIn = 1   ' Keeps the device screen on when the app is active but only when plugged in
+        KeepScreenOnAlways = 2          ' Keeps the device screen on when the app is active whether on battery or plugged in
+    End Enum
 
     ''' <summary>
     ''' Initializes the class to store/retrieve settings.
     ''' </summary>
     Shared Sub New()
-        pSettingsContainer = Current.RoamingSettings
+        Dim UseLocalSettings As Boolean = False
+        Dim pLocalSettingsContainer As ApplicationDataContainer = Current.LocalSettings
+
+        ' Attempt to see whether settings should be synced remotely or stored locally
+        Try
+            UseLocalSettings = CBool(pLocalSettingsContainer.Values(UseRoamingSettingsKey))
+        Catch ex As Exception
+            UseLocalSettings = False
+        End Try
+
+        ' Pick the right container
+        If UseLocalSettings Then
+            pSettingsContainer = Current.LocalSettings
+        Else
+            pSettingsContainer = Current.RoamingSettings
+        End If
+
         Call DeserializeEnrolledDevices()
     End Sub
 
@@ -42,6 +68,7 @@ Public Class Settings
     ''' </summary>
     Public Shared Sub ClearSettings()
         pSettingsContainer.Values.Remove(FirstRunSetupDoneKey)
+        pSettingsContainer.Values.Remove(FirstRunSettingsSavedKey)
         pSettingsContainer.Values.Remove(NightscoutURLKey)
         pSettingsContainer.Values.Remove(NightscoutSecretKey)
         pSettingsContainer.Values.Remove(LastSyncTimeKey)
@@ -49,6 +76,8 @@ Public Class Settings
         pSettingsContainer.Values.Remove(UploadIntervalKey)
         pSettingsContainer.Values.Remove(EnrolledDevicesKey)
         pSettingsContainer.Values.Remove(UseSecureUploadConnectionKey)
+        pSettingsContainer.Values.Remove(UseRoamingSettingsKey)
+        pSettingsContainer.Values.Remove(ScreenBehaviorKey)
         pDevices = New Collection(Of Device)
     End Sub
 
@@ -70,6 +99,23 @@ Public Class Settings
     End Property
 
     ''' <summary>
+    ''' Indicates that the first run settings have been saved.
+    ''' </summary>
+    ''' <returns>True if the prompts have already been run, False otherwise</returns>
+    Public Shared Property FirstRunSettingsSaved As Boolean
+        Get
+            Try
+                Return CBool(pSettingsContainer.Values(FirstRunSettingsSavedKey))
+            Catch ex As Exception
+                Return False
+            End Try
+        End Get
+        Set(value As Boolean)
+            pSettingsContainer.Values(FirstRunSettingsSavedKey) = value
+        End Set
+    End Property
+
+    ''' <summary>
     ''' Records the last time the app attempted to sync with Nightscout.
     ''' </summary>
     ''' <returns>A DateTime representing the last time the synchronization process was run</returns>
@@ -82,7 +128,7 @@ Public Class Settings
             End Try
         End Get
         Set(value As DateTime)
-            pSettingsContainer.Values(LastSyncTimeKey) = value.ToString
+            pSettingsContainer.Values(LastSyncTimeKey) = value.ToString()
         End Set
     End Property
 
@@ -166,6 +212,75 @@ Public Class Settings
         End Get
         Set(value As Boolean)
             pSettingsContainer.Values(UseSecureUploadConnectionKey) = value
+        End Set
+    End Property
+
+    ''' <summary>
+    ''' Sets whether to use/store settings in the Roaming store or the Local store
+    ''' </summary>
+    ''' <returns>True means settings are sync'd remotely, False means they're stored locally</returns>
+    Public Shared Property UseRoamingSettings As Boolean
+        Get
+            Try
+                Return CBool(pSettingsContainer.Values(UseRoamingSettingsKey))
+            Catch ex As Exception
+                Return True
+            End Try
+        End Get
+        Set(value As Boolean)
+            ' Only go through the following if the setting has changed
+            If value <> UseRoamingSettings Then
+                Dim CurrentContainer As ApplicationDataContainer = pSettingsContainer
+                Dim NewContainer As ApplicationDataContainer = Nothing
+                Dim EnrolledDevicesJSON As String = ""
+                Try
+                    EnrolledDevicesJSON = pSettingsContainer.Values(EnrolledDevicesKey).ToString.Trim()
+                Catch ex As Exception
+                    EnrolledDevicesJSON = ""
+                End Try
+
+                If value = True Then
+                    ' Move all the values from the local store to the remote store
+                    NewContainer = Current.RoamingSettings
+                Else
+                    ' Move all the values from the remote store to the local store
+                    NewContainer = Current.LocalSettings
+                End If
+
+                ' Move all the current settings to the new container
+                NewContainer.Values(FirstRunSetupDoneKey) = FirstRunSetupDone
+                NewContainer.Values(NightscoutURLKey) = NightscoutURL
+                NewContainer.Values(NightscoutSecretKey) = NightscoutAPIKey
+                NewContainer.Values(LastSyncTimeKey) = LastSyncTime.ToString()
+                NewContainer.Values(LastRecordTimestampKey) = LastSyncTime.ToString()
+                NewContainer.Values(UploadIntervalKey) = UploadInterval
+                NewContainer.Values(UseSecureUploadConnectionKey) = UseSecureUploadConnection
+                NewContainer.Values(ScreenBehaviorKey) = ScreenBehaviorKey
+                NewContainer.Values(UseRoamingSettingsKey) = value
+                NewContainer.Values(EnrolledDevicesKey) = EnrolledDevicesJSON
+
+                ' Switch out the container storage location
+                pSettingsContainer = NewContainer
+            End If
+        End Set
+    End Property
+
+    ''' <summary>
+    ''' Specifies how the screen should behave when the app is in the foreground.
+    ''' </summary>
+    ''' <returns>A ScreenBehavior enum value indicating whether to use the screen normally,
+    ''' keep the screen on when the app is in the foreground and plugged into power, or keep
+    ''' the screen on always even when on battery.</returns>
+    Public Shared Property ScreenSleepBehavior As ScreenBehavior
+        Get
+            Try
+                Return pSettingsContainer.Values(ScreenBehaviorKey)
+            Catch ex As KeyNotFoundException
+                Return ScreenBehavior.NormalScreenBehavior
+            End Try
+        End Get
+        Set(value As ScreenBehavior)
+            pSettingsContainer.Values(ScreenBehaviorKey) = CInt(value)
         End Set
     End Property
 
@@ -267,7 +382,13 @@ Public Class Settings
         ' If the OOBE steps haven't been run then we don't have anything to load
         If Not FirstRunSetupDone Then Return
 
-        Dim DeviceJson As String = pSettingsContainer.Values(EnrolledDevicesKey).ToString.Trim()
+        Dim DeviceJson As String = ""
+        Try
+            DeviceJson = pSettingsContainer.Values(EnrolledDevicesKey).ToString.Trim()
+        Catch ex As Exception
+            DeviceJson = ""
+        End Try
+
         If DeviceJson <> "" Then
             ' Load and deserialize the stream and pull the first Device object off
             Dim DeviceJsonStream As New MemoryStream(UTF8.GetBytes(DeviceJson))

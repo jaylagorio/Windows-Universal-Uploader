@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+
+<VoiceCommands xmlns="http://schemas.microsoft.com/voicecommands/1.2">
+  <CommandSet xml:lang="en-us" Name="NightscoutCommandSet_en-us">
+    <AppName>Nightscout</AppName>
+    <Example>Get my numbers</Example>
+
+    <Command Name="getDashboard">
+      <Example>Get my numbers</Example>
+      <ListenFor>[Get] [my] [the] numbers</ListenFor>
+      <Feedback>Connecting to Nightscout</Feedback>
+      <VoiceCommandService Target="NightscoutVoiceCommandService" />
+    </Command>
+  </CommandSet>
+</VoiceCommands>

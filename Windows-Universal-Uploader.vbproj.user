@@ -6,12 +6,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|ARM'">
     <DeviceId>30F105C9-681E-420b-A277-7C086EAD8A4E</DeviceId>
     <UseEmulator>true</UseEmulator>
-    <RemoteDebugMachine>192.168.2.124</RemoteDebugMachine>
-    <AuthenticationMode>Universal</AuthenticationMode>
+    <RemoteDebugMachine>192.168.2.118</RemoteDebugMachine>
+    <AuthenticationMode>None</AuthenticationMode>
     <RemoteDebugEnabled>false</RemoteDebugEnabled>
+    <CreateCleanLayout>true</CreateCleanLayout>
   </PropertyGroup>
   <PropertyGroup>
-    <AppxShowAllApps>False</AppxShowAllApps>
+    <AppxShowAllApps>True</AppxShowAllApps>
     <AppxPackageIsForStore>True</AppxPackageIsForStore>
     <AppxBuildConfigurationSelection>x86|x64|arm</AppxBuildConfigurationSelection>
   </PropertyGroup>
@@ -25,5 +26,8 @@
     <RemoteDebugEnabled>false</RemoteDebugEnabled>
     <DeviceId>30F105C9-681E-420b-A277-7C086EAD8A4E</DeviceId>
     <UseEmulator>false</UseEmulator>
+    <UseSimulator>false</UseSimulator>
+    <DoNotLaunchApp>false</DoNotLaunchApp>
+    <CreateCleanLayout>true</CreateCleanLayout>
   </PropertyGroup>
 </Project>

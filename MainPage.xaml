@@ -40,6 +40,7 @@
                     <VisualState.Setters>
                         <Setter Target="TopSyncStatus.Visibility" Value="Visible"/>
                         <Setter Target="cmdPrimarySettings.Visibility" Value="Visible"/>
+                        <Setter Target="cmdSecondarySettings.Visibility" Value="Collapsed"/>
                         <Setter Target="BottomCommandBar.Visibility" Value="Collapsed"/>
                     </VisualState.Setters>
                 </VisualState>
@@ -50,6 +51,7 @@
                     <VisualState.Setters>
                         <Setter Target="TopSyncStatus.Visibility" Value="Collapsed"/>
                         <Setter Target="cmdPrimarySettings.Visibility" Value="Collapsed"/>
+                        <Setter Target="cmdSecondarySettings.Visibility" Value="Visible"/>
                         <Setter Target="BottomCommandBar.Visibility" Value="Visible"/>
                     </VisualState.Setters>
                 </VisualState>

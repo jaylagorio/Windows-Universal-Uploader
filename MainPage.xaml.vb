@@ -1,11 +1,22 @@
-﻿''' <summary>
+﻿Imports Windows.System.Display
+Imports Windows.Devices.Power
+
+''' <summary>
 ''' Author: Jay Lagorio
-''' Date: June 12, 2016
+''' Date: October 30, 2016
 ''' Summary: MainPage serves as the primary display window for the app.
 ''' </summary>
 
 Public NotInheritable Class MainPage
     Inherits Page
+
+    ' Supports screen behavior for when the app is in the foreground
+    Dim pDisplayRequest As New DisplayRequest
+    Dim pDisplayRequestActive As Boolean = False
+    Dim pDisplayACStatus As Boolean = False
+
+    ' Used to see if the upload interval changes between showings of the Settings window
+    Dim pPreviousUploadInterval As Integer
 
     ''' <summary>
     ''' Fires when the MainPage is loaded.
@@ -15,23 +26,67 @@ Public NotInheritable Class MainPage
         ' gives the user the opportunity to configure the Nightscout URL and API Secret
         ' as well as add sync devices.
         If Not Settings.FirstRunSetupDone Then
-            Await RunOobe()
+            ' Check to see if at least one round in the Settings window has occured
+            If Not Settings.FirstRunSettingsSaved Then
+                ' Show the Settings page, pass True to activate Welcome Mode
+                Frame.Navigate(GetType(SettingsPage), True)
+            Else
+                ' If the first round of the Settings window resulted in saved settings then
+                ' continue on the OOBE and prompt the user to enroll a device
+
+                ' Set the first run setting
+                Settings.FirstRunSetupDone = True
+
+                ' If the user didn't enter a Nightscout API key they can't sync
+                ' so we won't show them the enrollment page
+                If Settings.NightscoutAPIKey = "" Then
+                    Await (New Windows.UI.Popups.MessageDialog("Before enrolling devices to upload your data to Nightscout you will need to enter your API Secret. Return to the Settings window when you're ready to do that and then add your devices.", "Nightscout API Secret")).ShowAsync
+                Else
+                    ' Show the enrollment page
+                    Dim WelcomeEnrollPage As New EnrollDevicePage
+                    Call WelcomeEnrollPage.ShowWelcomeMode()
+                    Await WelcomeEnrollPage.ShowAsync
+                    Call SetDeviceButtonState()
+                End If
+            End If
         End If
 
-        ' Depending on settings entered by the user initialize the main window layout
-        Call InitializeLayout()
+        ' Initialize the main window and the synchronizer only if the entire First Run process has been completed.
+        If Settings.FirstRunSetupDone And Settings.FirstRunSettingsSaved Then
+            ' Depending on settings entered by the user initialize the main window layout
+            Call InitializeLayout()
 
-        ' Add event handler and start the timer for Synchronizer
-        AddHandler Synchronizer.SynchronizationStarted, AddressOf SynchronizationStatusChanged
-        AddHandler Synchronizer.SynchronizationStopped, AddressOf SynchronizationStatusChanged
-        Call Synchronizer.StartTimer()
+            ' Load Cortana voice commands
+            Await InitializeCortana()
+
+            ' Add event handler and start the timer for Synchronizer
+            AddHandler Synchronizer.SynchronizationStarted, AddressOf SynchronizationStatusChanged
+            AddHandler Synchronizer.SynchronizationStopped, AddressOf SynchronizationStatusChanged
+
+            ' Add event handler to track AC power vs. battery power for screen activity and call
+            ' the screen configuration function
+            AddHandler Battery.AggregateBattery.ReportUpdated, AddressOf OnBatteryReportUpdated
+            Call SetScreenBehavior()
+
+            ' Start the timer for the synchronizer, if there is one
+            Call Synchronizer.StartTimer()
+
+            Call CenterWebView.Focus(FocusState.Pointer)
+            Call Me.Focus(FocusState.Pointer)
+        End If
     End Sub
 
     ''' <summary>
     ''' Fires when the MainPage gets focus, mainly serves to set the CommandBar button state.
     ''' </summary>
     Private Sub MainPage_GotFocus(sender As Object, e As RoutedEventArgs)
+        ' If the UploadInterval changed because the user went to the SettingsPage, recalibrate the timer
+        If pPreviousUploadInterval <> Settings.UploadInterval Then
+            Call Synchronizer.StopTimer()
+        End If
+
         Call SetDeviceButtonState()
+        Call Synchronizer.StartTimer()
     End Sub
 
     ''' <summary>
@@ -53,7 +108,7 @@ Public NotInheritable Class MainPage
     ''' </summary>
     Private Sub InitializeLayout()
         ' Initialize the synchronization engine so it can find the UI thread and the sync progress controls
-        Call Synchronizer.Initialize(Me, {prgTopSyncing, prgBottomSyncing}, {lblTopSyncStatus, lblBottomSyncStatus}, Settings.LastSyncTime)
+        Call Synchronizer.Initialize(Me, {prgTopSyncing, prgBottomSyncing}, {lblTopSyncStatus, lblBottomSyncStatus}, Settings.LastSyncTime, Settings.NightscoutURL, Settings.UseSecureUploadConnection, Settings.NightscoutAPIKey)
 
         ' Set the CommandBar button state based on settings
         Call SetDeviceButtonState()
@@ -84,36 +139,50 @@ Public NotInheritable Class MainPage
     End Sub
 
     ''' <summary>
-    ''' Runs the Out-of-Box Experience. This amounts to showing extra labeling on the
-    ''' Settings and New Device windows and displaying those windows in order.
+    ''' Register the latest version of the voice commands VCD to Cortana
     ''' </summary>
-    ''' <returns>No value returned</returns>
-    Private Async Function RunOobe() As Task
-        ' Show the Settings page
-        Dim WelcomeSettingsPage As New SettingsPage
-        Call WelcomeSettingsPage.ShowWelcomeMode()
-        Await WelcomeSettingsPage.ShowAsync
-
-        ' Set the first run setting
-        Settings.FirstRunSetupDone = True
-
-        ' If the user didn't enter a Nightscout API key they can't sync
-        ' so we won't show them the enrollment page
-        If Settings.NightscoutAPIKey = "" Then
-            Await (New Windows.UI.Popups.MessageDialog("Before enrolling devices to upload your data to Nightscout you will need to enter your API Secret. Return to the Settings window when you're ready to do that and then add your devices.", "Nightscout API Secret")).ShowAsync
-        Else
-            ' Show the enrollment page
-            Dim WelcomeEnrollPage As New EnrollDevicePage
-            Call WelcomeEnrollPage.ShowWelcomeMode()
-            Await WelcomeEnrollPage.ShowAsync
-            Call SetDeviceButtonState()
-        End If
-
-        Call CenterWebView.Focus(FocusState.Pointer)
-        Call Me.Focus(FocusState.Pointer)
-
-        Return
+    ''' <returns>Nothing</returns>
+    Private Async Function InitializeCortana() As Task
+        Await VoiceCommands.VoiceCommandDefinitionManager.InstallCommandDefinitionsFromStorageFileAsync(
+            Await Windows.Storage.StorageFile.GetFileFromApplicationUriAsync(New Uri("ms-appx:///VoiceCommands.xml"))
+        )
     End Function
+
+    Protected Overrides Sub OnNavigatedTo(e As NavigationEventArgs)
+    End Sub
+
+    ''' <summary>
+    ''' Requests or releases control of whether the screen goes to sleep at its normal timeout
+    ''' depending on the user setting and whether the device is plugged into AC power or not.
+    ''' </summary>
+    Private Sub SetScreenBehavior()
+        Select Case Settings.ScreenSleepBehavior
+            Case Settings.ScreenBehavior.NormalScreenBehavior
+                If pDisplayRequestActive Then
+                    Call pDisplayRequest.RequestRelease()
+                End If
+            Case Settings.ScreenBehavior.KeepScreenOnWhenPluggedIn
+                If pDisplayACStatus Then
+                    If Not pDisplayRequestActive Then
+                        ' Device is plugged in and we don't have a request - get one
+                        Call pDisplayRequest.RequestActive()
+                    Else
+                        ' Device is plugged in and we have a request - do nothing
+                    End If
+                Else
+                    If Not pDisplayRequestActive Then
+                        ' Device is not plugged in and we don't have a request - do nothing
+                    Else
+                        ' Device is not plugged in and we have a request - release it
+                        Call pDisplayRequest.RequestRelease()
+                    End If
+                End If
+            Case Settings.ScreenBehavior.KeepScreenOnAlways
+                If Not pDisplayRequestActive Then
+                    Call pDisplayRequest.RequestActive()
+                End If
+        End Select
+    End Sub
 
     ''' <summary>
     ''' The Add Device button in the CommandBar.
@@ -185,21 +254,14 @@ Public NotInheritable Class MainPage
     ''' <summary>
     ''' The Settings button in the CommandBar.
     ''' </summary>
-    Private Async Sub cmdSettings_Click(sender As Object, e As RoutedEventArgs) Handles cmdPrimarySettings.Click, cmdSecondarySettings.Click
+    Private Sub cmdSettings_Click(sender As Object, e As RoutedEventArgs) Handles cmdPrimarySettings.Click, cmdSecondarySettings.Click
         Call Synchronizer.StopTimer()
 
-        Dim PreviousUploadInterval As Integer = Settings.UploadInterval
-        ' Show the SettingsListPage to change settings, then reset the upload interval if it changed
-        Await (New SettingsPage).ShowAsync
+        'Save the current upload interval to see if it changes later
+        pPreviousUploadInterval = Settings.UploadInterval
 
-        ' If the UploadInterval changed, recalibrate the timer
-        If PreviousUploadInterval <> Settings.UploadInterval Then
-            Call Synchronizer.StopTimer()
-            Call Synchronizer.StartTimer()
-        End If
-
-        Call SetDeviceButtonState()
-        Call Synchronizer.StartTimer()
+        ' Show the SettingsPage to change settings
+        Frame.Navigate(GetType(SettingsPage))
     End Sub
 
     ''' <summary>
@@ -257,5 +319,29 @@ Public NotInheritable Class MainPage
     ''' </summary>
     Private Async Sub SynchronizationStatusChanged()
         Await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, AddressOf SetDeviceButtonState)
+    End Sub
+
+    ''' <summary>
+    ''' Event gets called when the user unplugs or plugs in their mobile device and changes
+    ''' the behavior of the screen when the app is in the foreground based on that setting.
+    ''' </summary>
+    ''' <param name="sender">Sent with the event</param>
+    ''' <param name="args">Sent with the event</param>
+    Private Async Sub OnBatteryReportUpdated(sender As Windows.Devices.Power.Battery, args As Object)
+        Dim Report As BatteryReport = sender.GetReport()
+
+        ' Get a battery report and see if we're on battery. If the battery is discharging then we
+        ' can safely say we're not plugged in, but if there isn't a battery, it's idle, or it's charging
+        ' then we can assume we're plugged in.
+        If Report.Status = Windows.System.Power.BatteryStatus.Discharging Then
+            pDisplayACStatus = False
+        Else
+            pDisplayACStatus = True
+        End If
+
+        ' Set the screen behavior accordingly using the main UI thread
+        Await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, Sub()
+                                                                                     Call SetScreenBehavior()
+                                                                                 End Sub)
     End Sub
 End Class

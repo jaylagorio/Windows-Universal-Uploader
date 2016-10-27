@@ -366,5 +366,5 @@
   <AccountPackageIdentityNames>
     <MainPackageIdentityName>12850JayLagorio.StorjTrackr</MainPackageIdentityName>
   </AccountPackageIdentityNames>
-  <PackageInfoList LandingUrl="https://dev.windows.com/dashboard/Application?appId=9NBLGGH4VTWH" />
+  <PackageInfoList LandingUrl="https://developer.microsoft.com/dashboard/Application?appId=9NBLGGH4VTWH" />
 </StoreAssociation>

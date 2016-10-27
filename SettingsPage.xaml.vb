@@ -1,11 +1,11 @@
 ﻿''' <summary>
 ''' Author: Jay Lagorio
-''' Date: June 5, 2016
-''' Summary: Allows the user to change the Nighscout host, API Secret, and sync timer interval.
+''' Date: October 30, 2016
+''' Summary: Allows the user to change app settings.
 ''' </summary>
 
 Public NotInheritable Class SettingsPage
-    Inherits ContentDialog
+    Inherits Page
 
     ' Indicates we're in OOBE mode
     Private pWelcomeMode As Boolean = False
@@ -16,7 +16,7 @@ Public NotInheritable Class SettingsPage
     ''' <summary>
     ''' Loads the dialog with preexisting settings values if set.
     ''' </summary>
-    Private Sub ContentDialog_Loaded(sender As Object, e As RoutedEventArgs)
+    Private Sub SettingsPages_Loaded(sender As Object, e As RoutedEventArgs) Handles Me.Loaded
         If Settings.NightscoutURL <> "" Then
             txtNightscoutDomain.Text = Settings.NightscoutURL
             txtNightscoutDomain.FontStyle = Windows.UI.Text.FontStyle.Normal
@@ -33,13 +33,48 @@ Public NotInheritable Class SettingsPage
             End If
         Next
 
+        For i = 0 To lstScreenBehavior.Items.Count - 1
+            If lstScreenBehavior.Items(i).Tag = CInt(Settings.ScreenSleepBehavior) Then
+                lstScreenBehavior.SelectedIndex = i
+            End If
+        Next
+
         chkSecureConnection.IsChecked = Settings.UseSecureUploadConnection
+        chkUseRoamingSettings.IsChecked = Settings.UseRoamingSettings
+    End Sub
+
+    Private Sub SettingsPages_KeyUp(sender As Object, e As KeyRoutedEventArgs) Handles Me.KeyUp
+        If e.Key = Windows.System.VirtualKey.Enter Then
+            Call Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, Sub()
+                                                                                        cmdOK_Click(Nothing, Nothing)
+                                                                                    End Sub)
+        ElseIf e.Key = Windows.System.VirtualKey.Escape Then
+            Call Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, Sub()
+                                                                                        cmdCancel_Click(Nothing, Nothing)
+                                                                                    End Sub)
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' Allows the calling page to specify whether to use Welcome Mode.
+    ''' </summary>
+    ''' <param name="e">Passed by the navigation manager.</param>
+    Protected Overrides Sub OnNavigatedTo(e As NavigationEventArgs)
+        MyBase.OnNavigatedTo(e)
+
+        ' Check that a parameter was passed
+        If Not e.Parameter Is Nothing Then
+            ' Check that the parameter was True
+            If CBool(e.Parameter) Then
+                Call ShowWelcomeMode()
+            End If
+        End If
     End Sub
 
     ''' <summary>
     ''' Fires when the user clicks the OK button. Checks the settings the user indicated for validity and stores the new settings.
     ''' </summary>
-    Private Async Sub ContentDialog_PrimaryButtonClick(sender As ContentDialog, args As ContentDialogButtonClickEventArgs)
+    Private Async Sub cmdOK_Click(sender As Object, e As RoutedEventArgs) Handles cmdOK.Click
         'Check to make sure the domain name wasn't left blank
         If txtNightscoutDomain.Text.Trim() = "" Or txtNightscoutDomain.Text = "yoursitehere.azurewebsites.net" Then
             Await (New Windows.UI.Popups.MessageDialog("Please enter the domain name for your Nightscout host.", "Nightscout")).ShowAsync
@@ -61,15 +96,18 @@ Public NotInheritable Class SettingsPage
         End If
         Settings.UploadInterval = lstSyncInterval.SelectedItem.Tag
         Settings.UseSecureUploadConnection = chkSecureConnection.IsChecked
+        Settings.UseRoamingSettings = chkUseRoamingSettings.IsChecked
+        Settings.ScreenSleepBehavior = CInt(lstScreenBehavior.SelectedItem.Tag)
+        Settings.FirstRunSettingsSaved = True
 
-        Call Me.Hide()
+        Call Frame.GoBack()
     End Sub
 
     ''' <summary>
     ''' Closes the dialog without saving any changes.
     ''' </summary>
-    Private Sub ContentDialog_SecondaryButtonClick(sender As ContentDialog, args As ContentDialogButtonClickEventArgs)
-        Call Me.Hide()
+    Private Sub cmdCancel_Click(sender As Object, e As RoutedEventArgs) Handles cmdCancel.Click
+        Call Frame.GoBack()
     End Sub
 
     ''' <summary>
@@ -115,10 +153,12 @@ Public NotInheritable Class SettingsPage
     End Sub
 
     ''' <summary>
-    ''' Makes a TextBlock with a welcome message visible to the user.
+    ''' Makes a TextBlock with a welcome message visible to the user and hides the Cancel button.
     ''' </summary>
     Public Sub ShowWelcomeMode()
         pWelcomeMode = True
         lblWelcomeText.Visibility = Visibility.Visible
+        lblSettings.Visibility = Visibility.Collapsed
+        cmdCancel.Visibility = Visibility.Collapsed
     End Sub
 End Class
