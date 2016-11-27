@@ -8,7 +8,7 @@ Imports System.Runtime.Serialization.Json
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: October 30, 2016
+''' Date: November 6, 2016
 ''' Summary: A singleton class that syncs all connected and enrolled devices with Nightscout.
 ''' </summary>
 
@@ -467,7 +467,7 @@ Public Class Synchronizer
             End While
 
             ' If there is uploader device status to report create the record
-            Dim DeviceStatus As NightscoutDeviceStatusEntry = Await CreateDeviceStatusEntry()
+            Dim DeviceStatus As NightscoutDeviceStatusEntry = CreateDeviceStatusEntry()
             If Not DeviceStatus Is Nothing Then
                 Call NightscoutRecords.Add(DeviceStatus)
             End If
@@ -561,13 +561,12 @@ Public Class Synchronizer
     ''' Creates an instance of a class that represents the status of the upload device if the device is a phone.
     ''' </summary>
     ''' <returns>An instance of NightscoutDeviceStatusEntry that represents the status of the upload device</returns>
-    Private Shared Async Function CreateDeviceStatusEntry() As Task(Of NightscoutDeviceStatusEntry)
+    Private Shared Function CreateDeviceStatusEntry() As NightscoutDeviceStatusEntry
         ' Get battery data but only if the device is a phone. This doesn't work for laptops for some reason.
         If ApiInformation.IsApiContractPresent("Windows.Phone.PhoneContract", 1) Then
             Dim NightscoutEntry As New NightscoutDeviceStatusEntry
 
-            ' Get the battery report
-            Dim Report As BatteryReport = (Await Battery.FromIdAsync(Windows.Devices.Power.Battery.AggregateBattery.DeviceId)).GetReport()
+            Dim Report As BatteryReport = Battery.AggregateBattery.GetReport()
             NightscoutEntry.created_at = ISO8601TimeFromDateTime(DateTime.Now)
             NightscoutEntry.uploaderBattery = CInt(CDbl(Report.RemainingCapacityInMilliwattHours.Value) / CDbl(Report.FullChargeCapacityInMilliwattHours.Value) * 100)
 
@@ -623,7 +622,7 @@ Public Class Synchronizer
     End Function
 
     ''' <summary>
-    ''' 
+    ''' Converts a DaeTime to an ISO 8601 timestamp string.
     ''' </summary>
     ''' <param name="RealTime"></param>
     ''' <returns></returns>

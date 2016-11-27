@@ -5,11 +5,58 @@
     <AppName>Nightscout</AppName>
     <Example>Get my numbers</Example>
 
-    <Command Name="getDashboard">
-      <Example>Get my numbers</Example>
+    <Command Name="GetCGM">
+      <Example>What is my blood glucose?</Example>
       <ListenFor>[Get] [my] [the] numbers</ListenFor>
+      <ListenFor>[What] [is] [my] [the] blood glucose</ListenFor>
+      <ListenFor>[What] [are] [my] levels</ListenFor>
       <Feedback>Connecting to Nightscout</Feedback>
       <VoiceCommandService Target="NightscoutVoiceCommandService" />
     </Command>
+  
+    <Command Name="GetOpenAPS">
+      <Example>What is the status of my loop?</Example>
+      <ListenFor>[What] [is] [the] status [of] [my] loop</ListenFor>
+      <ListenFor>[What] [is] [the] loop status</ListenFor>
+      <ListenFor>[What] [is] [the] status [of] OpenAPS</ListenFor>
+      <ListenFor>[What] [is] [the] OpenAPS status</ListenFor>
+      <ListenFor>[What] [is]  [my] [the] [current] basal [rate]</ListenFor>
+      <Feedback>Connecting to Nightscout</Feedback>
+      <VoiceCommandService Target="NightscoutVoiceCommandService" />
+    </Command>
+
+    <Command Name="GetPump">
+      <Example>What is my pump status?</Example>
+      <ListenFor>[What] [is] [my] [the] status [of] [my] [the] [insulin] pump</ListenFor>
+      <ListenFor>[What] [is] [my] [the] [insulin] pump status</ListenFor>
+      <Feedback>Connecting to Nightscout</Feedback>
+      <VoiceCommandService Target="NightscoutVoiceCommandService" />
+    </Command>
+      
+    <Command Name="GetLastEntryFood">
+      <Example>What was my last food entry?</Example>
+      <ListenFor>[What] [was] [my] [the] last food [entry]</ListenFor>
+      <ListenFor>[What] [was] [my] [the] last meal [entry]</ListenFor>
+      <ListenFor>[What] [was] [my] [the] last snack [entry]</ListenFor>
+      <ListenFor>[What] [was] [my] [the] last carb [entry]</ListenFor>
+      <ListenFor>[What] [was] [my] [the] last carbohydrate [entry]</ListenFor>
+      <Feedback>Connecting to Nightscout</Feedback>
+      <VoiceCommandService Target="NightscoutVoiceCommandService" />
+    </Command>
+  
+    <Command Name="GetLastEntryTreatment">
+      <Example>What was my last bolus entry?</Example>
+      <ListenFor>[What] [was] [my] [the] last bolus [entry]</ListenFor>
+      <ListenFor>[What] [was] [my] [the] last bolus [treatment]</ListenFor>
+      <Feedback>Connecting to Nightscout</Feedback>
+      <VoiceCommandService Target="NightscoutVoiceCommandService" />
+    </Command>
+  
+    <Command Name="GetFullSystemStatus">
+      <Example>What is my full system status?</Example>
+      <ListenFor>[What] [is] [my] [the] [full] system status</ListenFor>
+      <Feedback>Connecting to Nightscout</Feedback>
+      <VoiceCommandService Target="NightscoutVoiceCommandService" />
+    </Command>  
   </CommandSet>
 </VoiceCommands>

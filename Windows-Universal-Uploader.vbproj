@@ -104,6 +104,8 @@
     <Content Include="ApplicationInsights.config">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Assets\GetStartedDirectionNarrow.png" />
+    <Content Include="Assets\NightscoutFullLogoNarrow.png" />
     <Content Include="VoiceCommands.xml" />
     <None Include="Package.StoreAssociation.xml" />
     <None Include="project.json" />
@@ -138,9 +140,9 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\DexcomReceiverIcon.png" />
-    <Content Include="Assets\GetStartedDirection.png" />
+    <Content Include="Assets\GetStartedDirectionWide.png" />
     <Content Include="Assets\NightscoutBaseLogo.png" />
-    <Content Include="Assets\NightscoutFullLogo.png" />
+    <Content Include="Assets\NightscoutFullLogoWide.png" />
     <Content Include="My Project\Default.rd.xml" />
     <Content Include="Assets\LockScreenLogo.scale-200.png" />
     <Content Include="Assets\SplashScreen.scale-200.png" />
@@ -207,11 +209,11 @@
       <Project>{643a4389-f843-4bf6-a617-ada113c16f6f}</Project>
       <Name>Dexcom</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Nightscout\Nightscout.vbproj">
+    <ProjectReference Include="Nightscout\Nightscout.vbproj">
       <Project>{c9e41f46-b4aa-498a-b9bf-beabd9565f5b}</Project>
       <Name>Nightscout</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Windows-Universal-Uploader-Background\Windows-Universal-Uploader-Background.vbproj">
+    <ProjectReference Include="Windows-Universal-Uploader-Background\Windows-Universal-Uploader-Background.vbproj">
       <Project>{1fde472c-ae80-4409-a4fc-da745a465634}</Project>
       <Name>Windows-Universal-Uploader-Background</Name>
     </ProjectReference>

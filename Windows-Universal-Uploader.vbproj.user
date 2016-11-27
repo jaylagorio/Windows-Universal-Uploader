@@ -9,7 +9,8 @@
     <RemoteDebugMachine>192.168.2.118</RemoteDebugMachine>
     <AuthenticationMode>None</AuthenticationMode>
     <RemoteDebugEnabled>false</RemoteDebugEnabled>
-    <CreateCleanLayout>true</CreateCleanLayout>
+    <CreateCleanLayout>false</CreateCleanLayout>
+    <DoNotLaunchApp>false</DoNotLaunchApp>
   </PropertyGroup>
   <PropertyGroup>
     <AppxShowAllApps>True</AppxShowAllApps>
@@ -28,6 +29,6 @@
     <UseEmulator>false</UseEmulator>
     <UseSimulator>false</UseSimulator>
     <DoNotLaunchApp>false</DoNotLaunchApp>
-    <CreateCleanLayout>true</CreateCleanLayout>
+    <CreateCleanLayout>false</CreateCleanLayout>
   </PropertyGroup>
 </Project>

@@ -4,18 +4,73 @@ Imports System.Runtime.Serialization.Json
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: October 30, 2016
+''' Date: November 6, 2016
 ''' Summary: A class used to interact with Nightscout servers.
 ''' </summary>
 
 Public Class Server
-    ' Data available from the Nightscout dashboard
-    Public Structure NightscoutDashboardData
-        Dim TrendArrow As String            ' The trend arrow
-        Dim CGMUpdateDelta As Integer       ' The time in minutes since the last sensor reading
-        Dim CurrentSGV As Integer           ' The current sensor value
-        Dim DifferentialSGV As Integer      ' The difference between the current sensor value and the previous
-        Dim ResultsLoaded As Boolean        ' Indicates the structure is informationally complete
+    ' Types of data that can be retrieved from a Nightscout server.
+    Public Enum NightscoutDataTypes
+        CGM = 1                 ' Retrieve CGM data
+        OpenAPS = 2             ' Retrieve OpenAPS loop data
+        Pump = 4                ' Retrieve insulin pump status
+        FoodEntry = 8           ' Retrieve food entry data
+        TreatmentEntry = 16     ' Retrieve bolus entry data
+    End Enum
+
+    ' Possible states for the pump
+    Public Enum PumpStatus
+        Normal = 0      ' Normal state
+        Bolusing = 1    ' The pump is bolusing
+        Suspended = 2   ' The pump is suspended
+    End Enum
+
+    ' Nightscout system status
+    Public Structure NightscoutData
+        Dim NightscoutCGMData As NightscoutCGMData                      ' CGM data returned when NightscoutDataTypes.CGM is set
+        Dim NightscoutOpenAPSData As NightscoutOpenAPSData              ' OpenAPS data returned when NightscoutDataTypes.OpenAPS is set
+        Dim NightscoutPumpData As NightscoutPumpData                    ' Pump data returned when NightscoutDataTypes.Pump is set
+        Dim NightscoutFoodTreatmentData As NightscoutTreatmentData      ' Meal/snack data returned when NightscoutDataTypes.FoodEntry is set
+        Dim NightscoutBolusTreatmentData As NightscoutTreatmentData     ' Insulin data returned when NightscoutDataTypes.TreatmentEntry is set
+    End Structure
+
+    ' Nightscout CGM data
+    Public Structure NightscoutCGMData
+        Dim UpdateDelta As Integer      ' The time in minutes since the last sensor reading
+        Dim TrendArrow As String        ' The trend arrow
+        Dim CurrentSGV As Integer       ' The current sensor value
+        Dim DifferentialSGV As Integer  ' The difference between the current sensor value and the previous
+        Dim ResultsLoaded As Boolean    ' Indicates the structure is informationally complete
+    End Structure
+
+    ' Nightscout OpenAPS data
+    Public Structure NightscoutOpenAPSData
+        Dim UpdateDelta As Integer   ' The time in minutes since the last loop execution
+        Dim IOB As Double            ' Current insulin on board
+        Dim CurrentBasal As Double   ' Current basal rate (temp or otherwise)
+        Dim Duration As Integer      ' The duration of any temporary basal rate
+        Dim CurrentSGV As Integer    ' The sensor glucose value used to calculate this state
+        Dim Reason As String         ' The OpenAPS verbose reason that got to this state
+        Dim Enacted As Boolean       ' Whether this data has been enacted on the user
+        Dim ResultsLoaded As Boolean ' Indicates the structure is informationally complete
+    End Structure
+
+    ' Nightscout Pump data
+    Public Structure NightscoutPumpData
+        Dim UpdateDelta As Integer      ' The time in minutes since the last loop execution
+        Dim BatteryVoltage As Double    ' Voltage for the insulin pump battery
+        Dim Status As PumpStatus        ' The state of the pump
+        Dim ReservoirLevel As Double    ' The amount of insulin in the reservoir
+        Dim ResultsLoaded As Boolean    ' Indicates the structure is informationally complete
+    End Structure
+
+    ' Nightscout Treatment data
+    Public Structure NightscoutTreatmentData
+        Dim TreatmentTime As DateTime                               ' The time this treatment occurred
+        Dim TreatmentType As NightscoutTreatmentEntry.EntryTypes    ' The type of treatment
+        Dim Units As Double                                         ' The number of units in the treatment, if applicable
+        Dim Carbohydrates As Integer                                ' The number of carbs in the treatment, if applicable
+        Dim ResultsLoaded As Boolean                                ' Indicates the structure is informationally complete
     End Structure
 
     ' The server name of the Nightscout host
@@ -39,65 +94,273 @@ Public Class Server
     ''' <summary>
     ''' Returns data currently displayed on the Nightscout screen depending on what features are turned on.
     ''' </summary>
-    ''' <returns>A structure containing data as Nightscout currently understands it. If the structure's ResultsLoaded value is True the data should be considered valid.</returns>
-    Public Async Function GetDashboardData() As Task(Of NightscoutDashboardData)
-        ' Attempt to get the latest entry entered into Nightscout
-        Dim WebClient As New HttpClient()
-        Dim DashboardData As New NightscoutDashboardData
+    ''' <param name="DataType">An enum specifying the type of data to retrieve. These values can be added together to get multiple data types in a single call.</param>
+    ''' <returns>A structure containing system data as Nightscout currently understands it. If the substructures' ResultsLoaded value is True the data should be considered valid.</returns>
+    Public Async Function GetCurrentData(ByVal DataType As NightscoutDataTypes) As Task(Of NightscoutData)
+        ' Get a method for making HTTP requests
+        Dim WebClient As New HttpClient
 
-        ' Setup the SGV data URI
-        Dim LastEntriesUri As Uri
-        If pUseSSL Then
-            LastEntriesUri = New Uri("https://" & pNightscoutURL & "/api/v1/entries.json?type=sgv&count=2")
-        Else
-            LastEntriesUri = New Uri("http://" & pNightscoutURL & "/api/v1/entries.json?type=sgv&count=2")
-        End If
+        ' Initialize the return data structure
+        Dim SystemData As New NightscoutData
+        SystemData.NightscoutCGMData = New NightscoutCGMData
+        SystemData.NightscoutOpenAPSData = New NightscoutOpenAPSData
+        SystemData.NightscoutPumpData = New NightscoutPumpData
+        SystemData.NightscoutFoodTreatmentData = New NightscoutTreatmentData
+        SystemData.NightscoutBolusTreatmentData = New NightscoutTreatmentData
 
-        ' Get the last two SGV values from the Nightscout server
-        Dim EntriesString As String = ""
-        Try
-            EntriesString = Await WebClient.GetStringAsync(LastEntriesUri)
-        Catch ex As Exception
-            ' If we can't get the entries fail out
-            Return Nothing
-        End Try
+        ' Check to see if CGM data is being requested
+        If (DataType And NightscoutDataTypes.CGM) = NightscoutDataTypes.CGM Then
+            ' Setup the SGV data URI
+            Dim LastEntriesUri As Uri
+            If pUseSSL Then
+                LastEntriesUri = New Uri("https://" & pNightscoutURL & "/api/v1/entries.json?type=sgv&count=2")
+            Else
+                LastEntriesUri = New Uri("http://" & pNightscoutURL & "/api/v1/entries.json?type=sgv&count=2")
+            End If
 
-        Dim GlucoseEntries() As NightscoutGlucoseEntry = Nothing
-        Dim LastEntryTime As DateTime = DateTime.MinValue
-        Dim GlucoseEntrySerializer As New DataContractJsonSerializer(GetType(NightscoutGlucoseEntry()))
-
-        If EntriesString <> "" Then
-            Dim JsonStream As New MemoryStream(UTF8.GetBytes(EntriesString))
-            ' Serialize the JSON into something usable
+            ' Get the last two SGV values from the Nightscout server
+            Dim EntriesString As String = ""
             Try
-                ' Serialize the listing from JSON
-                GlucoseEntries = GlucoseEntrySerializer.ReadObject(JsonStream)
-            Catch Ex As Exception
-                ' If something goes wrong then fail out
-                Return Nothing
+                EntriesString = Await WebClient.GetStringAsync(LastEntriesUri)
+            Catch ex As Exception
+                ' If we can't get the entries fail out
+                EntriesString = ""
             End Try
 
-            Try
-                If Not GlucoseEntries Is Nothing Then
-                    If GlucoseEntries.Count > 0 Then
-                        DashboardData.CurrentSGV = GlucoseEntries(0).sgv
-                        DashboardData.TrendArrow = GlucoseEntries(0).direction.ToUpper
+            ' Setup the array and serializer
+            Dim GlucoseEntries() As NightscoutGlucoseEntry = Nothing
+            Dim GlucoseEntrySerializer As New DataContractJsonSerializer(GetType(NightscoutGlucoseEntry()))
 
-                        ' If there's more than one entry get the two differential values
-                        If GlucoseEntries.Count > 1 Then
-                            DashboardData.DifferentialSGV = GlucoseEntries(0).sgv - GlucoseEntries(1).sgv
-                            DashboardData.CGMUpdateDelta = (DateTime.Now.ToLocalTime - DateTimeFromUnixEpoch(CULng(CStr(GlucoseEntries(0).date).Substring(0, CStr(GlucoseEntries(0).date).Length - 3))).ToLocalTime).TotalMinutes
+            If EntriesString <> "" Then
+                Dim SerializationFailure As Boolean = False
+                Dim JsonStream As New MemoryStream(UTF8.GetBytes(EntriesString))
+                ' Serialize the JSON into something usable
+                Try
+                    ' Serialize the listing from JSON
+                    GlucoseEntries = GlucoseEntrySerializer.ReadObject(JsonStream)
+                Catch Ex As Exception
+                    ' If something goes wrong then fail out
+                    SerializationFailure = True
+                End Try
+
+                If Not SerializationFailure Then
+                    Try
+                        If Not GlucoseEntries Is Nothing Then
+                            ' If there is glucose data, add it to the structure
+                            If GlucoseEntries.Count > 0 Then
+                                SystemData.NightscoutCGMData.CurrentSGV = GlucoseEntries(0).sgv
+                                SystemData.NightscoutCGMData.TrendArrow = GlucoseEntries(0).direction.ToUpper
+
+                                ' If there's more than one entry get the two differential values
+                                If GlucoseEntries.Count > 1 Then
+                                    SystemData.NightscoutCGMData.DifferentialSGV = GlucoseEntries(0).sgv - GlucoseEntries(1).sgv
+                                    SystemData.NightscoutCGMData.UpdateDelta = (DateTime.Now.ToLocalTime - DateTimeFromUnixEpoch(CULng(CStr(GlucoseEntries(0).date).Substring(0, CStr(GlucoseEntries(0).date).Length - 3))).ToLocalTime).TotalMinutes
+                                End If
+
+                                SystemData.NightscoutCGMData.ResultsLoaded = True
+                            End If
                         End If
-
-                        DashboardData.ResultsLoaded = True
-                    End If
+                    Catch Ex As Exception
+                        SystemData.NightscoutCGMData.ResultsLoaded = False
+                    End Try
                 End If
-            Catch Ex As Exception
-                Return Nothing
-            End Try
+            End If
         End If
 
-        Return DashboardData
+        ' Check to see if OpenAPS or pump data is being requested
+        If ((DataType And NightscoutDataTypes.OpenAPS) = NightscoutDataTypes.OpenAPS) Or ((DataType And NightscoutDataTypes.Pump) = NightscoutDataTypes.Pump) Then
+            ' Setup the OpenAPS data URI
+            Dim LastOpenAPSUri As Uri
+            If pUseSSL Then
+                LastOpenAPSUri = New Uri("https://" & pNightscoutURL & "/api/v1/devicestatus.json?count=1")
+            Else
+                LastOpenAPSUri = New Uri("http://" & pNightscoutURL & "/api/v1/devicestatus.json?count=1")
+            End If
+
+            ' Get the last two SGV values from the Nightscout server
+            Dim EntriesString As String = ""
+            Try
+                EntriesString = Await WebClient.GetStringAsync(LastOpenAPSUri)
+            Catch ex As Exception
+                ' If we can't get the entries fail out
+                EntriesString = ""
+            End Try
+
+            ' Setup the array and serializer
+            Dim OpenAPSEntries() As NightscoutDeviceStatusEntry = Nothing
+            Dim OpenAPSEntrySerializer As New DataContractJsonSerializer(GetType(NightscoutDeviceStatusEntry()))
+
+            If EntriesString <> "" Then
+                Dim SerializationFailure As Boolean = False
+                Dim JsonStream As New MemoryStream(UTF8.GetBytes(EntriesString))
+                ' Serialize the JSON into something usable
+                Try
+                    ' Serialize the listing from JSON
+                    OpenAPSEntries = OpenAPSEntrySerializer.ReadObject(JsonStream)
+                Catch Ex As Exception
+                    ' If something goes wrong then fail out
+                    SerializationFailure = True
+                End Try
+
+                If Not SerializationFailure Then
+                    Try
+                        If Not OpenAPSEntries Is Nothing Then
+                            If OpenAPSEntries.Count > 0 Then
+                                ' If there was OpenAPS data, add it to the structure
+                                Try
+                                    If Not OpenAPSEntries(0).openaps.enacted Is Nothing Then
+                                        SystemData.NightscoutOpenAPSData.CurrentBasal = OpenAPSEntries(0).openaps.enacted.rate
+                                        SystemData.NightscoutOpenAPSData.Enacted = OpenAPSEntries(0).openaps.enacted.received
+                                        SystemData.NightscoutOpenAPSData.IOB = OpenAPSEntries(0).openaps.enacted.IOB
+                                        SystemData.NightscoutOpenAPSData.Duration = OpenAPSEntries(0).openaps.enacted.duration
+                                        SystemData.NightscoutOpenAPSData.CurrentSGV = OpenAPSEntries(0).openaps.enacted.bg
+                                        SystemData.NightscoutOpenAPSData.Reason = OpenAPSEntries(0).openaps.enacted.reason
+                                        SystemData.NightscoutOpenAPSData.UpdateDelta = (DateTime.Now.ToLocalTime - DateTime.Parse(OpenAPSEntries(0).openaps.enacted.timestamp).ToLocalTime).TotalMinutes
+                                        SystemData.NightscoutOpenAPSData.ResultsLoaded = True
+                                    End If
+                                Catch ex As Exception
+                                    SystemData.NightscoutOpenAPSData.ResultsLoaded = False
+                                End Try
+
+                                ' If there was pump status data, add it to the structure
+                                Try
+                                    If Not OpenAPSEntries(0).pump Is Nothing Then
+                                        SystemData.NightscoutPumpData.UpdateDelta = (DateTime.Now.ToLocalTime - DateTime.Parse(OpenAPSEntries(0).pump.status.timestamp).ToLocalTime).TotalMinutes
+                                        SystemData.NightscoutPumpData.BatteryVoltage = OpenAPSEntries(0).pump.battery.voltage
+                                        SystemData.NightscoutPumpData.ReservoirLevel = OpenAPSEntries(0).pump.reservoir
+
+                                        If OpenAPSEntries(0).pump.status.suspended Then
+                                            SystemData.NightscoutPumpData.Status = PumpStatus.Suspended
+                                        ElseIf OpenAPSEntries(0).pump.status.bolusing Then
+                                            SystemData.NightscoutPumpData.Status = PumpStatus.Bolusing
+                                        Else
+                                            SystemData.NightscoutPumpData.Status = PumpStatus.Normal
+                                        End If
+
+                                        SystemData.NightscoutPumpData.ResultsLoaded = True
+                                    End If
+                                Catch ex As Exception
+                                    SystemData.NightscoutPumpData.ResultsLoaded = False
+                                End Try
+                            End If
+                        End If
+                    Catch Ex As Exception
+                        SystemData.NightscoutOpenAPSData.ResultsLoaded = False
+                        SystemData.NightscoutPumpData.ResultsLoaded = False
+                    End Try
+                End If
+            End If
+        End If
+
+        ' Check to see if food entry data is being requested
+        If (DataType And NightscoutDataTypes.FoodEntry) = NightscoutDataTypes.FoodEntry Then
+            ' Setup the food treatment data URI
+            Dim LastTreatmentUri As Uri
+            If pUseSSL Then
+                LastTreatmentUri = New Uri("https://" & pNightscoutURL & "/api/v1/treatments.json?count=1&find[carbs][$gt]=0")
+            Else
+                LastTreatmentUri = New Uri("http://" & pNightscoutURL & "/api/v1/treatments.json?count=1&find[carbs][$gt]=0")
+            End If
+
+            ' Get the last two SGV values from the Nightscout server
+            Dim EntriesString As String = ""
+            Try
+                EntriesString = Await WebClient.GetStringAsync(LastTreatmentUri)
+            Catch ex As Exception
+                ' If we can't get the entries fail out
+                EntriesString = ""
+            End Try
+
+            ' Setup the array and serializer
+            Dim TreatmentEntries() As NightscoutTreatmentEntry = Nothing
+            Dim TreatmentEntrySerializer As New DataContractJsonSerializer(GetType(NightscoutTreatmentEntry()))
+
+            If EntriesString <> "" Then
+                Dim SerializationFailure As Boolean = False
+                Dim JsonStream As New MemoryStream(UTF8.GetBytes(EntriesString))
+                ' Serialize the JSON into something usable
+                Try
+                    ' Serialize the listing from JSON
+                    TreatmentEntries = TreatmentEntrySerializer.ReadObject(JsonStream)
+                Catch Ex As Exception
+                    ' If something goes wrong then fail out
+                    SerializationFailure = True
+                End Try
+
+                If Not SerializationFailure Then
+                    Try
+                        If Not TreatmentEntries Is Nothing Then
+                            If TreatmentEntries.Count > 0 Then
+                                SystemData.NightscoutFoodTreatmentData.Units = TreatmentEntries(0).insulin
+                                SystemData.NightscoutFoodTreatmentData.Carbohydrates = TreatmentEntries(0).carbs
+                                SystemData.NightscoutFoodTreatmentData.TreatmentType = NightscoutEntry.EntryTypes.TreatmentEntry
+                                SystemData.NightscoutFoodTreatmentData.TreatmentTime = DateTime.Parse(TreatmentEntries(0).timestamp)
+
+                                SystemData.NightscoutFoodTreatmentData.ResultsLoaded = True
+                            End If
+                        End If
+                    Catch Ex As Exception
+                        SystemData.NightscoutFoodTreatmentData.ResultsLoaded = False
+                    End Try
+                End If
+            End If
+        End If
+
+        ' Check to see if bolus data is being requested
+        If (DataType And NightscoutDataTypes.TreatmentEntry) = NightscoutDataTypes.TreatmentEntry Then
+            ' Setup the bolus treatment data URI
+            Dim LastTreatmentUri As Uri
+            If pUseSSL Then
+                LastTreatmentUri = New Uri("https://" & pNightscoutURL & "/api/v1/treatments.json?count=1&find[insulin][$gt]=0")
+            Else
+                LastTreatmentUri = New Uri("http://" & pNightscoutURL & "/api/v1/treatments.json?count=1&find[insulin][$gt]=0")
+            End If
+
+            ' Get the last two SGV values from the Nightscout server
+            Dim EntriesString As String = ""
+            Try
+                EntriesString = Await WebClient.GetStringAsync(LastTreatmentUri)
+            Catch ex As Exception
+                ' If we can't get the entries fail out
+                EntriesString = ""
+            End Try
+
+            ' Setup the array and serializer
+            Dim TreatmentEntries() As NightscoutTreatmentEntry = Nothing
+            Dim TreatmentEntrySerializer As New DataContractJsonSerializer(GetType(NightscoutTreatmentEntry()))
+
+            If EntriesString <> "" Then
+                Dim SerializationFailure As Boolean = False
+                Dim JsonStream As New MemoryStream(UTF8.GetBytes(EntriesString))
+                ' Serialize the JSON into something usable
+                Try
+                    ' Serialize the listing from JSON
+                    TreatmentEntries = TreatmentEntrySerializer.ReadObject(JsonStream)
+                Catch Ex As Exception
+                    ' If something goes wrong then fail out
+                    SerializationFailure = True
+                End Try
+
+                If Not SerializationFailure Then
+                    Try
+                        If Not TreatmentEntries Is Nothing Then
+                            If TreatmentEntries.Count > 0 Then
+                                SystemData.NightscoutBolusTreatmentData.Units = TreatmentEntries(0).insulin
+                                SystemData.NightscoutBolusTreatmentData.Carbohydrates = TreatmentEntries(0).carbs
+                                SystemData.NightscoutBolusTreatmentData.TreatmentType = NightscoutEntry.EntryTypes.TreatmentEntry
+                                SystemData.NightscoutBolusTreatmentData.TreatmentTime = DateTime.Parse(TreatmentEntries(0).timestamp)
+
+                                SystemData.NightscoutBolusTreatmentData.ResultsLoaded = True
+                            End If
+                        End If
+                    Catch Ex As Exception
+                        SystemData.NightscoutBolusTreatmentData.ResultsLoaded = False
+                    End Try
+                End If
+            End If
+        End If
+
+        Return SystemData
     End Function
 
     ''' <summary>

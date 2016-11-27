@@ -3,7 +3,7 @@ Imports Windows.Devices.Power
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: October 30, 2016
+''' Date: November 6, 2016
 ''' Summary: MainPage serves as the primary display window for the app.
 ''' </summary>
 
