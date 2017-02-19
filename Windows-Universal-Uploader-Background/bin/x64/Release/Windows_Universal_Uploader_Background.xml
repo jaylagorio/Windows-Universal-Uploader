@@ -1,0 +1,85 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<doc>
+<assembly>
+<name>
+Windows_Universal_Uploader_Background
+</name>
+</assembly>
+<members>
+<member name="T:Windows_Universal_Uploader_Background.NightscoutVoiceCommandService">
+ <summary>
+ Author: Jay Lagorio
+ Date: November 6, 2016
+ Summary: This service handles interactions from incomming Cortana commands.
+ </summary>
+</member>
+<member name="M:Windows_Universal_Uploader_Background.NightscoutVoiceCommandService.Run(Windows.ApplicationModel.Background.IBackgroundTaskInstance)">
+ <summary>
+ This routine is called by Cortana when a voice command is sent to the app.
+ </summary>
+ <param name="taskInstance">Information about the command given by the user</param>
+</member>
+<member name="M:Windows_Universal_Uploader_Background.NightscoutVoiceCommandService.RespondToCGMVoiceCommand(Windows.ApplicationModel.VoiceCommands.VoiceCommandServiceConnection)">
+ <summary>
+ Builds and executes a response to the user command to announce CGM data
+ </summary>
+ <param name="VoiceServiceConnection">An active connection to the Cortana service.</param>
+ <returns>Does not return anything.</returns>
+</member>
+<member name="M:Windows_Universal_Uploader_Background.NightscoutVoiceCommandService.RespondToOpenAPSVoiceCommand(Windows.ApplicationModel.VoiceCommands.VoiceCommandServiceConnection)">
+ <summary>
+ Builds and executes a response to the user command for OpenAPS loop status.
+ </summary>
+ <param name="VoiceServiceConnection">An active connection to the Cortana service.</param>
+ <returns>Does not return anything.</returns>
+</member>
+<member name="M:Windows_Universal_Uploader_Background.NightscoutVoiceCommandService.RespondToPumpVoiceCommand(Windows.ApplicationModel.VoiceCommands.VoiceCommandServiceConnection)">
+ <summary>
+ Builds and executes a response to the user command for pump status.
+ </summary>
+ <param name="VoiceServiceConnection">An active connection to the Cortana service.</param>
+ <returns>Does not return anything.</returns>
+</member>
+<member name="M:Windows_Universal_Uploader_Background.NightscoutVoiceCommandService.RespondToLastEntryFoodVoiceCommand(Windows.ApplicationModel.VoiceCommands.VoiceCommandServiceConnection)">
+ <summary>
+ Builds and executes a response to the user command for the last food entry.
+ </summary>
+ <param name="VoiceServiceConnection"></param>
+ <returns></returns>
+</member>
+<member name="M:Windows_Universal_Uploader_Background.NightscoutVoiceCommandService.RespondToLastEntryTreatmentVoiceCommand(Windows.ApplicationModel.VoiceCommands.VoiceCommandServiceConnection)">
+ <summary>
+ Builds and executes a response to the user command for the last bolus entry.
+ </summary>
+ <param name="VoiceServiceConnection">An active connection to the Cortana service.</param>
+ <returns>Does not return anything.</returns>
+</member>
+<member name="M:Windows_Universal_Uploader_Background.NightscoutVoiceCommandService.RespondToFullSystemStatusVoiceCommand(Windows.ApplicationModel.VoiceCommands.VoiceCommandServiceConnection)">
+ <summary>
+ Builds and executes a response to the user command for full and detailed status of all treatment and monitoring systems.
+ </summary>
+ <param name="VoiceServiceConnection">An active connection to the Cortana service.</param>
+ <returns>Does not return anything.</returns>
+</member>
+<member name="M:Windows_Universal_Uploader_Background.NightscoutVoiceCommandService.LoadSettings">
+ <summary>
+ Loads settings for Cortana command processing
+ </summary>
+</member>
+<member name="M:Windows_Universal_Uploader_Background.NightscoutVoiceCommandService.InterpretEntryTime(System.Int32,System.Boolean)">
+ <summary>
+ Takes an amount of minutes and interprets it into a string containing the number of hours and minutes represented.
+ </summary>
+ <param name="EntryTime">The number of minutes to interpret</param>
+ <param name="Shorten">Whether the returned string should use abreviations</param>
+ <returns></returns>
+</member>
+<member name="M:Windows_Universal_Uploader_Background.NightscoutVoiceCommandService.CreateCortanaResponse(System.String)">
+ <summary>
+ Creates a visual and auditory response for Cortana.
+ </summary>
+ <param name="ResponseString">The string to display and speak</param>
+ <returns>A VoiceCommandResponse to be processed by Cortana in response to the user.</returns>
+</member>
+</members>
+</doc>

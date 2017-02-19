@@ -7,7 +7,7 @@ Imports Windows.Security.Cryptography.Core
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: October 30, 2016
+''' Date: February 19, 2017
 ''' Summary: Exposes a quick and easy way to save and retrieve settings. Data is saved as Roaming Settings, allowing the 
 ''' user to move from system to system while being able to sync devices that have been enrolled on any other system.
 ''' </summary>
@@ -31,6 +31,7 @@ Public Class Settings
     Private Const UseSecureUploadConnectionKey As String = "UseSecureUploadConnection"
     Private Const UseRoamingSettingsKey As String = "UseRoamingSettings"
     Private Const ScreenBehaviorKey As String = "ScreenBehavior"
+    Private Const DisableAudibleAlarmsKey As String = "DisableAudibleAlarms"
 
     ' Behavior for the screen depending on battery/power situation
     Public Enum ScreenBehavior
@@ -78,6 +79,7 @@ Public Class Settings
         pSettingsContainer.Values.Remove(UseSecureUploadConnectionKey)
         pSettingsContainer.Values.Remove(UseRoamingSettingsKey)
         pSettingsContainer.Values.Remove(ScreenBehaviorKey)
+        pSettingsContainer.Values.Remove(DisableAudibleAlarms)
         pDevices = New Collection(Of Device)
     End Sub
 
@@ -281,6 +283,23 @@ Public Class Settings
         End Get
         Set(value As ScreenBehavior)
             pSettingsContainer.Values(ScreenBehaviorKey) = CInt(value)
+        End Set
+    End Property
+
+    ''' <summary>
+    ''' Specifies whether sound should be enabled when alarms are triggered
+    ''' </summary>
+    ''' <returns>True if alarms should be muted, False otherwise.</returns>
+    Public Shared Property DisableAudibleAlarms As Boolean
+        Get
+            Try
+                Return pSettingsContainer.Values(DisableAudibleAlarmsKey)
+            Catch ex As KeyNotFoundException
+                Return False
+            End Try
+        End Get
+        Set(value As Boolean)
+            pSettingsContainer.Values(DisableAudibleAlarmsKey) = value
         End Set
     End Property
 

@@ -83,3 +83,19 @@ NotInheritable Class App
     End Sub
 
 End Class
+
+' Proof spelling here: https://github.com/jaylagorio/CareLink-USB-for-Windows-Apps
+
+'For the next release
+' Band integration                                              '89ee4f44-39d0-4d7b-93da-553a4305efad
+'   First page: Arrow, Number (delta), Last Updated (x mins)    'b42218b5-a1a2-4b97-a5d0-2e538d2f1a92
+'   Second page: IOB, Current Basal, Last Loop run (x mins)     'bd810550-75c2-4ab2-b00b-eff65b99e4c6
+'   Third page: Last Treatment size, carbs if so, time delta    '031d1ee0-00a6-4903-83bd-bcfca64abb66
+'   Fourth page: Refresh button                                 '01229f41-8c31-425e-9a8a-bd84108eb81a
+' Lock Screen: 
+'   https://msdn.microsoft.com/en-us/library/windows/apps/dn934800.aspx
+'   https://msdn.microsoft.com/en-us/library/windows/apps/hh779720.aspx
+'   https://msdn.microsoft.com/en-us/library/windows/apps/dn934782.aspx
+' App insights? How do I get more info from this and add more telemetry
+' https://github.com/openaps/dexcom_reader/pull/6, https://github.com/bewest/dexcom_reader/pull/1, https://github.com/bewest/dexcom_reader/pull/1#issuecomment-157866179
+' Care Portal shows a dialog when entering items but that dialog doesn't show in the app - https://social.msdn.microsoft.com/Forums/en-US/2a075255-39f6-4b1c-97b1-a62e7c566633/how-can-i-handle-confirm-dialog-in-webview-uwp-windows-10-app-c?forum=wpdevelop; http://stackoverflow.com/questions/35405827/uwp-webview-calls-dynamic-javascript (modify the function not to need the confirm);

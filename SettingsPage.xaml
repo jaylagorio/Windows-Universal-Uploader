@@ -43,6 +43,11 @@
 
             <Line Height="10"/>
 
+            <TextBlock Text="Alarms:" Margin="0,10,10,0"/>
+            <CheckBox x:Name="chkDisableAudibleAlarms" Width="200px" Content="Disable Audible Alarms"/>
+
+            <Line Height="10"/>
+
             <TextBlock Text="Share Settings:" Margin="0,10,10,0"/>
             <CheckBox x:Name="chkUseRoamingSettings" Width="200px" Content="Share Settings Between Devices"/>
 

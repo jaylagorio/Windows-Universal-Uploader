@@ -30,5 +30,8 @@
     <UseSimulator>false</UseSimulator>
     <DoNotLaunchApp>false</DoNotLaunchApp>
     <CreateCleanLayout>false</CreateCleanLayout>
+    <DebugEngines>
+    </DebugEngines>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
 </Project>

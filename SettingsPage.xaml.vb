@@ -1,6 +1,6 @@
 ﻿''' <summary>
 ''' Author: Jay Lagorio
-''' Date: October 30, 2016
+''' Date: February 19, 2017
 ''' Summary: Allows the user to change app settings.
 ''' </summary>
 
@@ -40,6 +40,7 @@ Public NotInheritable Class SettingsPage
         Next
 
         chkSecureConnection.IsChecked = Settings.UseSecureUploadConnection
+        chkDisableAudibleAlarms.IsChecked = Settings.DisableAudibleAlarms
         chkUseRoamingSettings.IsChecked = Settings.UseRoamingSettings
     End Sub
 
@@ -96,6 +97,7 @@ Public NotInheritable Class SettingsPage
         End If
         Settings.UploadInterval = lstSyncInterval.SelectedItem.Tag
         Settings.UseSecureUploadConnection = chkSecureConnection.IsChecked
+        Settings.DisableAudibleAlarms = chkDisableAudibleAlarms.IsChecked
         Settings.UseRoamingSettings = chkUseRoamingSettings.IsChecked
         Settings.ScreenSleepBehavior = CInt(lstScreenBehavior.SelectedItem.Tag)
         Settings.FirstRunSettingsSaved = True

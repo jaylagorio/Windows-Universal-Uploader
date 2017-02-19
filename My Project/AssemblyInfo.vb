@@ -12,7 +12,7 @@ Imports System.Runtime.InteropServices
 <Assembly: AssemblyDescription("An uploader app for Nightscout on Windows")>
 <Assembly: AssemblyCompany("Jay Lagorio")>
 <Assembly: AssemblyProduct("Nightscout Windows Uploader")>
-<Assembly: AssemblyCopyright("Copyright ©  2016 Jay Lagorio. All Rights Reserved.")>
+<Assembly: AssemblyCopyright("Copyright ©  2016 - 2017 Jay Lagorio. All Rights Reserved.")>
 <Assembly: AssemblyTrademark("")>
 
 ' Version information for an assembly consists of the following four values:

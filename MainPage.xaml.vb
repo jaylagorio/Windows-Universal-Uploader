@@ -1,9 +1,11 @@
 ﻿Imports Windows.System.Display
 Imports Windows.Devices.Power
+Imports Windows.UI.Popups
+Imports Microsoft.Band
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: November 6, 2016
+''' Date: February 19, 2017
 ''' Summary: MainPage serves as the primary display window for the app.
 ''' </summary>
 
@@ -123,11 +125,25 @@ Public NotInheritable Class MainPage
             CenterWebView.HorizontalAlignment = HorizontalAlignment.Stretch
             CenterWebView.Visibility = Visibility.Visible
 
+            Dim AddressHandler As String = ""
+            Dim MuteSetting As String = ""
+
+            ' Secure vs. insecure connection
             If Settings.UseSecureUploadConnection Then
-                Call CenterWebView.Navigate(New Uri("https://" & Settings.NightscoutURL, UriKind.Absolute))
+                AddressHandler = "https://"
             Else
-                Call CenterWebView.Navigate(New Uri("http://" & Settings.NightscoutURL, UriKind.Absolute))
+                AddressHandler = "http://"
             End If
+
+            ' Mute alarm audio
+            If Settings.DisableAudibleAlarms Then
+                MuteSetting = "?mute=true"
+            Else
+                MuteSetting = ""
+            End If
+
+            ' Navigate to the Nightscout server using the above address handler and mute settings
+            Call CenterWebView.Navigate(New Uri(AddressHandler & Settings.NightscoutURL & MuteSetting, UriKind.Absolute))
         Else
             ' If the Nightscout URL hasn't been enetered the primary WebView is pretty
             ' useless. Collapse the WebView and show some image assets to prompt
@@ -277,6 +293,22 @@ Public NotInheritable Class MainPage
         End If
     End Sub
 
+    Private Async Sub cmdMicrosoftBand_Click(sender As Object, e As RoutedEventArgs) Handles cmdMicrosoftBand.Click
+        ' Get rid of the Import when this moves out
+        Dim ClientManager As IBandClientManager = BandClientManager.Instance
+        Dim NightscoutTile As New Tiles.BandTile(New Guid("d9cfb3f6-7add-4df8-8e50-2a462f009b26"))
+        'Dim NightscoutIcon As Tiles.BandIcon
+
+        Dim PairedBands As IBandInfo() = Await ClientManager.GetBandsAsync()
+        If PairedBands.Count > 0 Then
+            Dim Band As IBandClient = ClientManager.ConnectAsync(PairedBands(0))
+            Await Band.TileManager.AddTileAsync(NightscoutTile)
+        Else
+            ' Launch Bluetooth after displaying message
+            ' await Launcher.LaunchUriAsync(new Uri("ms-settings-bluetooth:"));
+        End If
+    End Sub
+
     ''' <summary>
     ''' Determine the enabled state of the CommandBar buttons.
     ''' </summary>
@@ -343,5 +375,22 @@ Public NotInheritable Class MainPage
         Await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, Sub()
                                                                                      Call SetScreenBehavior()
                                                                                  End Sub)
+    End Sub
+
+    ''' <summary>
+    ''' Event gets called when the web browser pane finishes navigating to the Nightscout
+    ''' page. This handler injects Javascript into the page to override the window.confirm
+    ''' function to always return True, enabling the Care Portal to enter data because
+    ''' popups are disabled in embedded WebViews.
+    ''' </summary>
+    ''' <param name="sender"></param>
+    ''' <param name="args"></param>
+    Private Async Sub CenterWebView_NavigationCompleted(sender As WebView, args As WebViewNavigationCompletedEventArgs) Handles CenterWebView.NavigationCompleted
+        ' Setup the overrided function
+        Dim ScriptLine(0) As String
+        ScriptLine(0) = "window.confirm = function (ConfirmMessage) {return true;}"
+
+        ' Inject the function to be overridden
+        Await CenterWebView.InvokeScriptAsync("eval", ScriptLine)
     End Sub
 End Class
