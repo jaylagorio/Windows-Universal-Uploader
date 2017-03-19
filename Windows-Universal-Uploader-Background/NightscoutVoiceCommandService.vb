@@ -1,18 +1,20 @@
 ﻿Imports Nightscout
 Imports Windows.Storage
 Imports Windows.Storage.ApplicationData
+Imports Microsoft.Services.Store.Engagement
 Imports Windows.ApplicationModel.AppService
 Imports Windows.ApplicationModel.Background
 Imports Windows.ApplicationModel.VoiceCommands
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: November 6, 2016
+''' Date: March 19, 2017
 ''' Summary: This service handles interactions from incomming Cortana commands.
 ''' </summary>
 
 Public NotInheritable Class NightscoutVoiceCommandService
     Implements IBackgroundTask
+    Dim StoreInsightsReporter As StoreServicesCustomEventLogger = StoreServicesCustomEventLogger.GetDefault()
 
     ' Indicates whether the First Run setup process was completed
     Dim pFirstRunSetupDone As Boolean
@@ -57,6 +59,8 @@ Public NotInheritable Class NightscoutVoiceCommandService
                 AddHandler taskInstance.Canceled, AddressOf Differal.Complete
                 AddHandler VoiceServiceConnection.VoiceCommandCompleted, AddressOf Differal.Complete
 
+                Call StoreInsightsReporter.Log("Cortana activated")
+
                 ' Check to make sure the First Run configuration has taken place
                 If pFirstRunSetupDone Then
                     ' Make sure the Nightscout server URL is configured
@@ -64,16 +68,22 @@ Public NotInheritable Class NightscoutVoiceCommandService
                         ' Figure out which command was fired
                         Select Case VoiceCommand.CommandName
                             Case "GetCGM"
+                                Call StoreInsightsReporter.Log("Cortana - GetCGM")
                                 Await RespondToCGMVoiceCommand(VoiceServiceConnection)
                             Case "GetOpenAPS"
+                                Call StoreInsightsReporter.Log("Cortana - GetOpenAPS")
                                 Await RespondToOpenAPSVoiceCommand(VoiceServiceConnection)
                             Case "GetPump"
+                                Call StoreInsightsReporter.Log("Cortana - GetPump")
                                 Await RespondToPumpVoiceCommand(VoiceServiceConnection)
                             Case "GetLastEntryFood"
+                                Call StoreInsightsReporter.Log("Cortana - GetLastEntryFood")
                                 Await RespondToLastEntryFoodVoiceCommand(VoiceServiceConnection)
                             Case "GetLastEntryTreatment"
+                                Call StoreInsightsReporter.Log("Cortana - GetLastEntryTreatment")
                                 Await RespondToLastEntryTreatmentVoiceCommand(VoiceServiceConnection)
                             Case "GetFullSystemStatus"
+                                Call StoreInsightsReporter.Log("Cortana - GetFullSystemStatus")
                                 Await RespondToFullSystemStatusVoiceCommand(VoiceServiceConnection)
                             Case Else
                                 Call VoiceServiceConnection.RequestAppLaunchAsync(CreateCortanaResponse("Launching Nightscout"))

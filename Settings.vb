@@ -7,7 +7,7 @@ Imports Windows.Security.Cryptography.Core
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: February 19, 2017
+''' Date: March 19, 2017
 ''' Summary: Exposes a quick and easy way to save and retrieve settings. Data is saved as Roaming Settings, allowing the 
 ''' user to move from system to system while being able to sync devices that have been enrolled on any other system.
 ''' </summary>
@@ -31,7 +31,8 @@ Public Class Settings
     Private Const UseSecureUploadConnectionKey As String = "UseSecureUploadConnection"
     Private Const UseRoamingSettingsKey As String = "UseRoamingSettings"
     Private Const ScreenBehaviorKey As String = "ScreenBehavior"
-    Private Const DisableAudibleAlarmsKey As String = "DisableAudibleAlarms"
+    Private Const UseAudibleAlarmsKey As String = "UseAudibleAlarms"
+    Private Const AlwaysShowLastSyncTimeKey As String = "AlwaysShowLastSyncTime"
 
     ' Behavior for the screen depending on battery/power situation
     Public Enum ScreenBehavior
@@ -79,7 +80,8 @@ Public Class Settings
         pSettingsContainer.Values.Remove(UseSecureUploadConnectionKey)
         pSettingsContainer.Values.Remove(UseRoamingSettingsKey)
         pSettingsContainer.Values.Remove(ScreenBehaviorKey)
-        pSettingsContainer.Values.Remove(DisableAudibleAlarms)
+        pSettingsContainer.Values.Remove(UseAudibleAlarms)
+        pSettingsContainer.Values.Remove(AlwaysShowLastSyncTimeKey)
         pDevices = New Collection(Of Device)
     End Sub
 
@@ -260,6 +262,8 @@ Public Class Settings
                 NewContainer.Values(ScreenBehaviorKey) = ScreenBehaviorKey
                 NewContainer.Values(UseRoamingSettingsKey) = value
                 NewContainer.Values(EnrolledDevicesKey) = EnrolledDevicesJSON
+                NewContainer.Values(UseAudibleAlarmsKey) = UseAudibleAlarms
+                NewContainer.Values(AlwaysShowLastSyncTimeKey) = AlwaysShowLastSyncTimeKey
 
                 ' Switch out the container storage location
                 pSettingsContainer = NewContainer
@@ -279,6 +283,8 @@ Public Class Settings
                 Return pSettingsContainer.Values(ScreenBehaviorKey)
             Catch ex As KeyNotFoundException
                 Return ScreenBehavior.NormalScreenBehavior
+            Catch ex As InvalidCastException
+                Return ScreenBehavior.NormalScreenBehavior
             End Try
         End Get
         Set(value As ScreenBehavior)
@@ -289,17 +295,36 @@ Public Class Settings
     ''' <summary>
     ''' Specifies whether sound should be enabled when alarms are triggered
     ''' </summary>
-    ''' <returns>True if alarms should be muted, False otherwise.</returns>
-    Public Shared Property DisableAudibleAlarms As Boolean
+    ''' <returns>True if alarms should be audible, False otherwise.</returns>
+    Public Shared Property UseAudibleAlarms As Boolean
         Get
             Try
-                Return pSettingsContainer.Values(DisableAudibleAlarmsKey)
+                Return pSettingsContainer.Values(UseAudibleAlarmsKey)
             Catch ex As KeyNotFoundException
-                Return False
+                Return True
             End Try
         End Get
         Set(value As Boolean)
-            pSettingsContainer.Values(DisableAudibleAlarmsKey) = value
+            pSettingsContainer.Values(UseAudibleAlarmsKey) = value
+        End Set
+    End Property
+
+    ''' <summary>
+    ''' Specifies whether the last sync time should always be displayed. If True, and there isn't room to
+    ''' display it in the header (portrait devices, for example), the footer is shown with the time. Otherwise
+    ''' the footer doesn't get displayed.
+    ''' </summary>
+    ''' <returns>True if effort should be made to show last sync time all the time, False otherwise.</returns>
+    Public Shared Property AlwaysShowLastSyncTime As Boolean
+        Get
+            Try
+                Return pSettingsContainer.Values(AlwaysShowLastSyncTimeKey)
+            Catch ex As KeyNotFoundException
+                Return True
+            End Try
+        End Get
+        Set(value As Boolean)
+            pSettingsContainer.Values(AlwaysShowLastSyncTimeKey) = value
         End Set
     End Property
 

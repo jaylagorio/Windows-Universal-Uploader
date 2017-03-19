@@ -1,1 +1,1 @@
-C:\Users\Jay.LAGORIO\Desktop\Windows-Universal-Uploader\Windows-Universal-Uploader\AppPackages\Windows-Universal-Uploader_1.6.0.0\Windows-Universal-Uploader_1.6.0.0_x86_x64_arm.appxbundle
+C:\Users\Jay\Desktop\Windows-Universal-Uploader\Windows-Universal-Uploader\AppPackages\Windows-Universal-Uploader_1.8.0.0\Windows-Universal-Uploader_1.8.0.0_x86_x64_arm.appxbundle

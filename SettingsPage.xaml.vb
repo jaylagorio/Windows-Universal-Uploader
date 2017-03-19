@@ -1,6 +1,10 @@
-﻿''' <summary>
+﻿Imports Microsoft.Band
+Imports Microsoft.Band.Tiles
+Imports Windows_Universal_Uploader_Background
+
+''' <summary>
 ''' Author: Jay Lagorio
-''' Date: February 19, 2017
+''' Date: March 19, 2017
 ''' Summary: Allows the user to change app settings.
 ''' </summary>
 
@@ -27,21 +31,31 @@ Public NotInheritable Class SettingsPage
             txtNightscoutSecret.FontStyle = Windows.UI.Text.FontStyle.Normal
         End If
 
-        For i = 0 To lstSyncInterval.Items.Count - 1
-            If lstSyncInterval.Items(i).Tag = Settings.UploadInterval Then
-                lstSyncInterval.SelectedIndex = i
-            End If
-        Next
+        Select Case Settings.UploadInterval
+            Case 0
+                lstSyncInterval.SelectedIndex = 0
+            Case 1
+                lstSyncInterval.SelectedIndex = 1
+            Case 3
+                lstSyncInterval.SelectedIndex = 2
+            Case 5
+                lstSyncInterval.SelectedIndex = 3
+            Case 10
+                lstSyncInterval.SelectedIndex = 4
+            Case 15
+                lstSyncInterval.SelectedIndex = 5
+            Case 20
+                lstSyncInterval.SelectedIndex = 6
+            Case Else
+                lstSyncInterval.SelectedIndex = 0
+        End Select
 
-        For i = 0 To lstScreenBehavior.Items.Count - 1
-            If lstScreenBehavior.Items(i).Tag = CInt(Settings.ScreenSleepBehavior) Then
-                lstScreenBehavior.SelectedIndex = i
-            End If
-        Next
+        lstScreenBehavior.SelectedIndex = CInt(Settings.ScreenSleepBehavior)
 
-        chkSecureConnection.IsChecked = Settings.UseSecureUploadConnection
-        chkDisableAudibleAlarms.IsChecked = Settings.DisableAudibleAlarms
-        chkUseRoamingSettings.IsChecked = Settings.UseRoamingSettings
+        chkSecureConnection.IsOn = Settings.UseSecureUploadConnection
+        chkUseAudibleAlarms.IsOn = Settings.UseAudibleAlarms
+        chkAlwaysShowLastSyncTime.IsOn = Settings.AlwaysShowLastSyncTime
+        chkUseRoamingSettings.IsOn = Settings.UseRoamingSettings
     End Sub
 
     Private Sub SettingsPages_KeyUp(sender As Object, e As KeyRoutedEventArgs) Handles Me.KeyUp
@@ -95,11 +109,28 @@ Public NotInheritable Class SettingsPage
         If txtNightscoutSecret.Text.Trim() <> "" And txtNightscoutSecret.Text <> NightscoutAPITextBoxObfuscated And txtNightscoutSecret.Text <> NightscoutAPITextBoxPlaceholder Then
             Settings.NightscoutAPIKey = txtNightscoutSecret.Text
         End If
-        Settings.UploadInterval = lstSyncInterval.SelectedItem.Tag
-        Settings.UseSecureUploadConnection = chkSecureConnection.IsChecked
-        Settings.DisableAudibleAlarms = chkDisableAudibleAlarms.IsChecked
-        Settings.UseRoamingSettings = chkUseRoamingSettings.IsChecked
-        Settings.ScreenSleepBehavior = CInt(lstScreenBehavior.SelectedItem.Tag)
+        Select Case lstSyncInterval.SelectedIndex
+            Case 0
+                Settings.UploadInterval = 0
+            Case 1
+                Settings.UploadInterval = 1
+            Case 2
+                Settings.UploadInterval = 3
+            Case 3
+                Settings.UploadInterval = 5
+            Case 4
+                Settings.UploadInterval = 10
+            Case 5
+                Settings.UploadInterval = 15
+            Case 6
+                Settings.UploadInterval = 20
+        End Select
+
+        Settings.UseSecureUploadConnection = chkSecureConnection.IsOn
+        Settings.AlwaysShowLastSyncTime = chkAlwaysShowLastSyncTime.IsOn
+        Settings.UseAudibleAlarms = chkUseAudibleAlarms.IsOn
+        Settings.UseRoamingSettings = chkUseRoamingSettings.IsOn
+        Settings.ScreenSleepBehavior = CInt(lstScreenBehavior.SelectedIndex)
         Settings.FirstRunSettingsSaved = True
 
         Call Frame.GoBack()

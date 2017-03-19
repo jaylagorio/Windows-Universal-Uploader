@@ -1,9 +1,8 @@
 ﻿Imports Windows.UI.Popups
-Imports Microsoft.ApplicationInsights
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: June 12, 2016
+''' Date: March 19, 2017
 ''' Summary: Shows the user a list of currently enrolled devices and allows them to remove any that are no longer needed.
 ''' </summary>
 
@@ -55,11 +54,11 @@ Public NotInheritable Class DeviceListPage
                 If DeviceList(i).SerialNumber = SerialNumber Then
                     If Not Await DeviceList(i).IsConnected Then
                         If Await DeviceList(i).Connect() Then
-                            Call ReportDeviceRemovalTelemetry(DeviceList(i))
+                            Call ReportDeviceRemovalTelemetry(DeviceList(i), DeviceList(i).InterfaceName)
                             Await DeviceList(i).Disconnect()
                         End If
                     Else
-                        Call ReportDeviceRemovalTelemetry(DeviceList(i))
+                        Call ReportDeviceRemovalTelemetry(DeviceList(i), DeviceList(i).InterfaceName)
                     End If
 
                     Settings.RemoveEnrolledDevice(DeviceList(i))
@@ -77,25 +76,12 @@ Public NotInheritable Class DeviceListPage
     End Sub
 
     ''' <summary>
-    ''' 
+    ''' Uses the Store Services SDK to report device removal to the app publisher. This information doesn't
+    ''' identify the user and is used to find crashes and bugs after app publication.
     ''' </summary>
-    ''' <param name="NewDevice"></param>
-    Private Sub ReportDeviceRemovalTelemetry(ByRef NewDevice As DexcomDevice)
-        Dim ApplicationInsights As New TelemetryClient
-        Dim EventProperties As New Dictionary(Of String, String)
-
-        ' Gather device firmware data. The first call will cause the device to be queried.
-        Call EventProperties.Add("SerialNumber", NewDevice.SerialNumber)
-        Call EventProperties.Add("InterfaceName", NewDevice.InterfaceName)
-        If Not NewDevice.DexcomReceiver Is Nothing Then
-            Call EventProperties.Add("SchemaVersion", NewDevice.DexcomReceiver.SchemaVersion)
-            Call EventProperties.Add("ProductID", NewDevice.DexcomReceiver.ProductId)
-            Call EventProperties.Add("ProductName", NewDevice.DexcomReceiver.ProductName)
-            Call EventProperties.Add("SoftwareNumber", NewDevice.DexcomReceiver.SoftwareNumber)
-            Call EventProperties.Add("FirmwareVersion", NewDevice.DexcomReceiver.FirmwareVersion)
-        End If
-
-        ' Send the event to the Insights platform
-        Call ApplicationInsights.TrackEvent("Unenrolled Dexcom Device", EventProperties)
+    ''' <param name="NewDevice">The newly enrolled device to report data about</param>
+    ''' <param name="InterfaceType">The interface of the removed device (e.g. USB, BT)</param>
+    Private Sub ReportDeviceRemovalTelemetry(ByRef NewDevice As DexcomDevice, ByVal InterfaceType As String)
+        Call App.StoreInsightsReporter.Log("Removed " & InterfaceType & " Dexcom Device")
     End Sub
 End Class

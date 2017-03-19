@@ -5,7 +5,7 @@ Imports Microsoft.Band
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: February 19, 2017
+''' Date: March 19, 2017
 ''' Summary: MainPage serves as the primary display window for the app.
 ''' </summary>
 
@@ -38,11 +38,16 @@ Public NotInheritable Class MainPage
 
                 ' Set the first run setting
                 Settings.FirstRunSetupDone = True
+                If Settings.EnrolledDevices.Count = 0 Then
+                    Call App.StoreInsightsReporter.Log("First Run Setup Completed - No Sync Devices")
+                Else
+                    Call App.StoreInsightsReporter.Log("First Run Setup Completed - Sync Device")
+                End If
 
                 ' If the user didn't enter a Nightscout API key they can't sync
                 ' so we won't show them the enrollment page
                 If Settings.NightscoutAPIKey = "" Then
-                    Await (New Windows.UI.Popups.MessageDialog("Before enrolling devices to upload your data to Nightscout you will need to enter your API Secret. Return to the Settings window when you're ready to do that and then add your devices.", "Nightscout API Secret")).ShowAsync
+                    Await (New MessageDialog("Before enrolling devices to upload your data to Nightscout you will need to enter your API Secret. Return to the Settings window when you're ready to do that and then add your devices.", "Nightscout API Secret")).ShowAsync
                 Else
                     ' Show the enrollment page
                     Dim WelcomeEnrollPage As New EnrollDevicePage
@@ -136,10 +141,10 @@ Public NotInheritable Class MainPage
             End If
 
             ' Mute alarm audio
-            If Settings.DisableAudibleAlarms Then
-                MuteSetting = "?mute=true"
-            Else
+            If Settings.UseAudibleAlarms Then
                 MuteSetting = ""
+            Else
+                MuteSetting = "?mute=true"
             End If
 
             ' Navigate to the Nightscout server using the above address handler and mute settings
@@ -163,9 +168,6 @@ Public NotInheritable Class MainPage
             Await Windows.Storage.StorageFile.GetFileFromApplicationUriAsync(New Uri("ms-appx:///VoiceCommands.xml"))
         )
     End Function
-
-    Protected Overrides Sub OnNavigatedTo(e As NavigationEventArgs)
-    End Sub
 
     ''' <summary>
     ''' Requests or releases control of whether the screen goes to sleep at its normal timeout
@@ -207,7 +209,7 @@ Public NotInheritable Class MainPage
         Call Synchronizer.StopTimer()
 
         If Settings.NightscoutAPIKey = "" Then
-            Await (New Windows.UI.Popups.MessageDialog("Please configure your API Secret before enrolling devices. Devices will not be able to sync with Nightscout without this setting.")).ShowAsync
+            Await (New MessageDialog("Please configure your API Secret before enrolling devices. Devices will not be able to sync with Nightscout without this setting.")).ShowAsync
         Else
             ' Show the window and if the user clicked OK set the CommandBar button state
             If Await (New EnrollDevicePage).ShowAsync() = ContentDialogResult.None Or ContentDialogResult.Primary Or ContentDialogResult.Secondary Then
@@ -263,7 +265,7 @@ Public NotInheritable Class MainPage
 
         ' Display an error message when an error occurs
         If ErrorOccurred Then
-            Await (New Windows.UI.Popups.MessageDialog("An error occurred while synchronizing with Nightscout. Please try again.", "Nightscout")).ShowAsync()
+            Await (New MessageDialog("An error occurred while synchronizing with Nightscout. Please try again.", "Nightscout")).ShowAsync()
         End If
     End Sub
 
@@ -290,22 +292,6 @@ Public NotInheritable Class MainPage
         Else
             Call CenterWebView.Navigate(New Uri("http://" & Settings.NightscoutURL, UriKind.Absolute))
             Call CenterWebView.Refresh()
-        End If
-    End Sub
-
-    Private Async Sub cmdMicrosoftBand_Click(sender As Object, e As RoutedEventArgs) Handles cmdMicrosoftBand.Click
-        ' Get rid of the Import when this moves out
-        Dim ClientManager As IBandClientManager = BandClientManager.Instance
-        Dim NightscoutTile As New Tiles.BandTile(New Guid("d9cfb3f6-7add-4df8-8e50-2a462f009b26"))
-        'Dim NightscoutIcon As Tiles.BandIcon
-
-        Dim PairedBands As IBandInfo() = Await ClientManager.GetBandsAsync()
-        If PairedBands.Count > 0 Then
-            Dim Band As IBandClient = ClientManager.ConnectAsync(PairedBands(0))
-            Await Band.TileManager.AddTileAsync(NightscoutTile)
-        Else
-            ' Launch Bluetooth after displaying message
-            ' await Launcher.LaunchUriAsync(new Uri("ms-settings-bluetooth:"));
         End If
     End Sub
 
@@ -392,5 +378,18 @@ Public NotInheritable Class MainPage
 
         ' Inject the function to be overridden
         Await CenterWebView.InvokeScriptAsync("eval", ScriptLine)
+    End Sub
+
+    ''' <summary>
+    ''' Handles window resizing, showing/hiding the bottom command bar depending on the
+    ''' AlwaysShowLastSyncTime setting. If the setting is True (the default) nothing special
+    ''' happens and the XAML visual states update automatically.
+    ''' </summary>
+    ''' <param name="sender"></param>
+    ''' <param name="e"></param>
+    Private Sub MainPage_SizeChanged(sender As Object, e As SizeChangedEventArgs) Handles Me.SizeChanged
+        If Not Settings.AlwaysShowLastSyncTime Then
+            BottomCommandBar.Visibility = Visibility.Collapsed
+        End If
     End Sub
 End Class

@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" IgnorableNamespaces="uap mp">
-  <Identity Name="12850JayLagorio.NightscoutUploader" Publisher="CN=FBEF3CAF-AA6B-4D9F-9489-07B220763A3B" Version="1.7.0.0" />
+  <Identity Name="12850JayLagorio.NightscoutUploader" Publisher="CN=FBEF3CAF-AA6B-4D9F-9489-07B220763A3B" Version="1.8.0.0" />
   <mp:PhoneIdentity PhoneProductId="7944e2e9-cb72-4ce5-8816-5b09c21d77a0" PhonePublisherId="00000000-0000-0000-0000-000000000000" />
   <Properties>
     <DisplayName>Nightscout Uploader</DisplayName>
@@ -34,34 +34,27 @@
     </Application>
   </Applications>
   <Capabilities>
-    <!-- To access public and private Nightscout instances -->
     <Capability Name="internetClient" />
     <Capability Name="privateNetworkClientServer" />
+    <!-- To access public and private Nightscout instances -->
     <!-- To access Bluetooth pump/CGM devices where possible -->
-    <DeviceCapability Name="bluetooth" />
     <!-- To access serial upload devices -->
+    <!-- To support the Medtronic CareLink USB stick when using the WinUSB driver -->
+    <!-- To support the Bayer Contour NextLink meter -->
+    <DeviceCapability Name="bluetooth" />
     <DeviceCapability Name="serialcommunication">
       <Device Id="any">
         <Function Type="name:serialPort" />
       </Device>
     </DeviceCapability>
-    <!-- To support the Medtronic CareLink USB stick when using the WinUSB driver -->
     <DeviceCapability Name="usb">
       <Device Id="vidpid:0A21 8001">
         <Function Type="winUsbId:a5dcbf10-6530-11d2-901f-00c04fb951ed" />
       </Device>
     </DeviceCapability>
-    <!-- To support the Bayer Contour NextLink meter -->
     <DeviceCapability Name="humaninterfacedevice">
       <Device Id="vidpid:1A79 6200">
         <Function Type="usage:FF40 0001" />
-      </Device>
-    </DeviceCapability>
-    <!-- To enable Microsoft Band devices -->
-    <DeviceCapability Name="bluetooth.rfcomm">
-      <Device Id="any">
-        <Function Type="serviceId:A502CA9A-2BA5-413C-A4E0-13804E47B38F"/>
-        <Function Type="serviceId:C742E1A2-6320-5ABC-9643-D206C677E580"/>
       </Device>
     </DeviceCapability>
   </Capabilities>

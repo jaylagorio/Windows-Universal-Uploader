@@ -3,7 +3,7 @@ Imports System.Runtime.Serialization
 
 ''' <summary>
 ''' Author: Jay Lagorio
-''' Date: May 29, 2016
+''' Date: March 19, 2017
 ''' Summary: Provides communication with Dexcom monitor devices.
 ''' </summary>
 
@@ -160,6 +160,7 @@ Imports System.Runtime.Serialization
                         Return True
                     Else
                         ' Fail out if an error occurs
+                        Call App.StoreInsightsReporter.Log("A connection error occurred with a " & DevicesFound(i).InterfaceName & " Dexcom device")
                         Return False
                     End If
                 End If
@@ -175,6 +176,7 @@ Imports System.Runtime.Serialization
                     End If
                 Else
                     ' Fail out if an error occurs
+                    Call App.StoreInsightsReporter.Log("A connection error occurred with a " & DevicesFound(i).InterfaceName & " Dexcom device")
                     Return False
                 End If
             End If
